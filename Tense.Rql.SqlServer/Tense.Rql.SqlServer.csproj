@@ -1,0 +1,58 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+	  <TargetFramework>netstandard2.1</TargetFramework>
+	  <LangVersion>latest</LangVersion>
+	  <Nullable>enable</Nullable>
+	  <Copyright>(C) 2022 Michael Zuniga</Copyright>
+	  <Authors>Michael Zuniga</Authors>
+	  <Company>Michael Zuniga</Company>
+	  <Description>A library to add RQL support to RESTful Web Services using SQL Server</Description>
+	  <PackageLicenseExpression>MIT</PackageLicenseExpression>
+	  <RepositoryUrl>https://github.com/mzuniga58/Tense.Rql.SqlServer</RepositoryUrl>
+	  <Version>0.0.2-alpha</Version>
+	  <PackageReleaseNotes>Pre-release. DO NOT USE.</PackageReleaseNotes>
+	  <PackageId>Tense.Rql.SqlServer</PackageId>
+	  <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+	  <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+	  <PackageTags>REST, RQL, HAL, Hateoas, Resource Query Language, Web Services, Web API, RESTful</PackageTags>
+	  <NeutralLanguage>en-US</NeutralLanguage>
+	  <Title>Tense.Rql.SqlServer</Title>
+	  <GenerateDocumentationFile>true</GenerateDocumentationFile>
+	  <PackageIcon>ico64.png</PackageIcon>
+	  <ApplicationIcon>Resources\MZ.ico</ApplicationIcon>
+	  <PackageIconUrl>https://github.com/mzuniga58/Tense.Rql.SqlServer/Tense.Rql.SqlServer/Resources/MZ.ico</PackageIconUrl>
+	  <PackageProjectUrl>https://github.com/mzuniga58/Tense.Rql.SqlServer</PackageProjectUrl>
+	  <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+	<ItemGroup>
+		<None Include="..\README.md">
+			<Pack>True</Pack>
+			<PackagePath>\</PackagePath>
+		</None>
+		<None Include="Resources\ico64.png" Pack="true" PackagePath="\" />
+		<None Include="Resources\MZ.ico" Pack="true" PackagePath="\" />
+	</ItemGroup>
+	
+	<ItemGroup>
+		<PackageReference Include="System.Data.SqlClient" Version="4.8.3" />
+		<PackageReference Include="Tense" Version="0.0.2-alpha" />
+		<PackageReference Include="Tense.Rql" Version="0.0.2-alpha" />
+	</ItemGroup>
+  <ItemGroup>
+    <Compile Update="Resources\Resources.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Update="Resources\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>
