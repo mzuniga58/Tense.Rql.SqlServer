@@ -28,110 +28,282 @@ namespace Tense.Rql.SqlServer
 			_batchLimit = batchLimit;	
 		}
 
+        #region Generic SQL Statement generation functions
+        #region Select Single
+        /// <summary>
+        /// Builds the SQL query for a single result
+        /// </summary>
+        /// <typeparam name="T">The type of entity to retrieve.</typeparam>
+        /// <param name="node">The <see cref="RqlNode"/> that further restricts the output.</param>
+        /// <param name="parameters">The list of <see cref="SqlParameter"/> that must be bound to execute the SQL statement.</param>
+        /// <returns>The SQL Statement that returns the first entity that matches the <see cref="RqlNode"/> restrictions.</returns>
+        /// <remarks>The <see cref="RqlNode"/> may specify a query that returns multiple records, but only the first
+        /// record will be returned.</remarks>
+        public string GenerateSelectSingle<T>(RqlNode node, out List<SqlParameter> parameters) where T : class
+		{
+			return GenerateSelectSingle(typeof(T), node, out parameters);
+		}
+
 		/// <summary>
-		/// Builds the SQL Query to update items in the datastore
+		/// Builds the SQL query for a single result
 		/// </summary>
-		/// <param name="entityType">The type of object to update.</param>
-		/// <param name="item">The item to update</param>
-		/// <param name="parameters">The list of <see cref="SqlParameter"/>s used in the query.</param>
-		/// <param name="node">The <see cref="RqlNode"/> that further constrains the update.</param>
-		/// <returns>The SQL query used to update items in the datastore</returns>
-		public string GenerateUpdateStatement(Type entityType, object item, RqlNode node, out List<SqlParameter> parameters) 
+		/// <param name="entityType">The type of entity to retrieve.</param>
+		/// <param name="node">The <see cref="RqlNode"/> that further restricts the output.</param>
+		/// <param name="parameters">The list of SQL parameters that must be bound to execute the SQL statement.</param>
+		/// <returns>The SQL Statement that returns the first entity that matches the <see cref="RqlNode"/> restrictions.</returns>
+		/// <remarks>The <see cref="RqlNode"/> may specify a query that returns multiple records, but only the first
+		/// record will be returned.</remarks>
+		public string GenerateSelectSingle(Type entityType, RqlNode node, out List<SqlParameter> parameters)
 		{
 			parameters = new List<SqlParameter>();
 			var tableAttribute = entityType.GetCustomAttribute<Table>();
-			var properties = entityType.GetProperties();
-			var whereClause = ParseWhereClause(entityType, node, null, tableAttribute, properties, parameters);
 
 			if (tableAttribute == null)
-				throw new InvalidCastException($"The class {item.GetType().Name} is not an entity model.");
+				throw new InvalidCastException($"The class {entityType.Name} is not an entity model.");
 
+			var properties = entityType.GetProperties();
 			var sql = new StringBuilder();
+			var whereClause = ParseWhereClause(entityType, node, null, tableAttribute, properties, parameters);
+			var orderByClause = ParseOrderByClause(entityType, node);
+			var selectFields = node?.Find(RqlOperation.SELECT);
+			bool firstField = true;
 
-			if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
-				sql.AppendLine($"UPDATE {OB}{tableAttribute.Name}{CB}");
-			else
-				sql.AppendLine($"UPDATE {OB}{tableAttribute.Schema}{CB}.{OB}{tableAttribute.Name}{CB}");
+			sql.Append("SELECT ");
 
-			bool first = true;
+			if (node?.Find(RqlOperation.DISTINCT) != null)
+			{
+				sql.Append("DISTINCT ");
+			}
+
+			if (node?.Find(RqlOperation.FIRST) != null)
+			{
+				sql.Append("TOP 1 ");
+			}
 
 			foreach (var property in properties)
 			{
-				var memberAttribute = property.GetCustomAttribute<MemberAttribute>();
-
-				if (memberAttribute != null)
+				if (RqlUtilities.CheckForInclusion(property, selectFields))
 				{
-					if (memberAttribute.SkipUpdate)
-						continue;
-
-					var tableName = string.IsNullOrWhiteSpace(memberAttribute.TableName) ? tableAttribute.Name : memberAttribute.TableName;
-					var columnName = string.IsNullOrWhiteSpace(memberAttribute.ColumnName) ? property.Name : memberAttribute.ColumnName;
-
-					if (string.Equals(tableName, tableAttribute.Name, StringComparison.InvariantCulture))
-					{
-						if (!memberAttribute.IsPrimaryKey && !memberAttribute.AutoField)
-						{
-							var parameterName = $"@P{parameters.Count}";
-							var propValue = property.GetValue(item);
-							parameters.Add(BuildSqlParameter(parameterName, property, propValue));
-
-							if (first)
-							{
-								sql.Append($" SET {OB}{columnName}{CB} = {parameterName}");
-								first = false;
-							}
-							else
-							{
-								sql.AppendLine(",");
-								sql.Append($"     {OB}{columnName}{CB} = {parameterName}");
-							}
-						}
-					}
+					AppendPropertyForRead(sql, tableAttribute, property, ref firstField);
 				}
 			}
 
+			AppendFromClause(sql, tableAttribute);
 			AppendWhereClause(sql, whereClause);
+			AppendOrderByClause(sql, orderByClause);
+
 			return sql.ToString();
 		}
+		#endregion
+
+		#region Select Collection Count
+		/// <summary>
+		/// Builds the count query for the collection
+		/// </summary>
+		/// <typeparam name="T">The type of entities to retrieve.</typeparam>
+		/// <param name="node">The <see cref="RqlNode"/> that filters the result set.</param>
+		/// <param name="parameters">The list of <see cref="SqlParameter"/> that must be bound to execute the SQL statement.</param>
+		/// <returns>The SQL Statement that returns total number of entities in a collection that matches the <see cref="RqlNode"/> restritions.</returns>
+		/// <remarks>The total count of entities can be used as a member of a paged collection.</remarks>
+		public string GenerateCollectionCountStatement<T>(RqlNode node, out List<SqlParameter> parameters) where T : class
+        {
+			return GenerateCollectionCountStatement(typeof(T), node, out parameters);
+        }
 
 		/// <summary>
-		/// Builds a query to delete an object from the datastore using the specfied keys
+		/// Builds the count query for the collection
 		/// </summary>
-		/// <param name="parameters">The list of SQL parameters that must be bound to execute the SQL statement</param>
-		/// <param name="node">The <see cref="RqlNode"/> that further constrains the delete.</param>
-		/// <returns></returns>
-		public string GenerateDeleteStatement<T>(RqlNode node, out List<SqlParameter> parameters)
+		/// <param name="entityType">The type of entities to retrieve.</param>
+		/// <param name="node">The <see cref="RqlNode"/> that filters the result set.</param>
+		/// <param name="parameters">The list of <see cref="SqlParameter"/> that must be bound to execute the SQL statement.</param>
+		/// <returns>The SQL Statement that returns total number of entities in a collection that matches the <see cref="RqlNode"/> restritions.</returns>
+		/// <remarks>The total count of entities can be used as a member of a paged collection.</remarks>
+		public string GenerateCollectionCountStatement(Type entityType, RqlNode node, out List<SqlParameter> parameters)
 		{
 			parameters = new List<SqlParameter>();
-			var tableAttribute = typeof(T).GetCustomAttribute<Table>();
+			var tableAttribute = entityType.GetCustomAttribute<Table>(false);
 
 			if (tableAttribute == null)
-				throw new InvalidCastException($"The class {typeof(T).Name} is not an entity model.");
+				throw new InvalidCastException($"The class {entityType.Name} is not an entity model.");
 
-			var properties = typeof(T).GetProperties();
+			var properties = entityType.GetProperties();
 			var sql = new StringBuilder();
+			var whereClause = ParseWhereClause(entityType, node, null, tableAttribute, properties, parameters);
 
-			string whereClause = ParseWhereClause<T>(node, null, tableAttribute, properties, parameters);
+			if (node.Find(RqlOperation.AGGREGATE) is RqlNode aggregateNode)
+			{
+				sql.AppendLine("SELECT COUNT(*) as [RecordCount]");
+				sql.Append("  FROM ( SELECT ");
 
-			if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
-				sql.AppendLine($"DELETE FROM {OB}{tableAttribute.Name}{CB}");
+				bool firstMember = true;
+
+				foreach (RqlNode childNode in aggregateNode)
+				{
+					if (childNode.Operation == RqlOperation.PROPERTY)
+					{
+						var property = properties.FirstOrDefault(p => string.Equals(childNode.Value<string>(0), p.Name, StringComparison.OrdinalIgnoreCase));
+						AppendPropertyForRead(sql, tableAttribute, property, ref firstMember);
+					}
+				}
+
+				AppendFromClause(sql, tableAttribute);
+				AppendWhereClause(sql, whereClause);
+				AppendGroupByClause(sql, aggregateNode, tableAttribute, properties);
+
+				sql.Append(") as T0");
+			}
+			else if (node.Find(RqlOperation.MAX) != null ||
+					 node.Find(RqlOperation.MIN) != null ||
+					 node.Find(RqlOperation.MEAN) != null ||
+					 node.Find(RqlOperation.SUM) != null)
+			{
+				sql.Append("SELECT 1 AS [RecordCount]");
+			}
+			if (node.Find(RqlOperation.VALUES) is RqlNode valuesNode)
+			{
+				sql.Append("SELECT COUNT(*) as [RecordCount] FROM (SELECT DISTINCT ");
+				bool firstMember = true;
+
+				var propertyNode = valuesNode.NonNullValue<RqlNode>(0);
+				var property = properties.FirstOrDefault(p => string.Equals(propertyNode.Value<string>(0), p.Name, StringComparison.OrdinalIgnoreCase));
+				AppendProperty(sql, tableAttribute, property, ref firstMember);
+				AppendFromClause(sql, tableAttribute);
+				AppendWhereClause(sql, whereClause);
+				sql.Append(") AS T0");
+			}
+			else if (node.Find(RqlOperation.FIRST) is not null)
+			{
+				sql.Append("SELECT 1 AS [RecordCount]");
+			}
+			else if (node.Find(RqlOperation.DISTINCT) != null)
+			{
+				var selectFields = node?.Find(RqlOperation.SELECT);
+
+				sql.Append("SELECT COUNT(*) AS [RecordCount] FROM (SELECT DISTINCT ");
+
+				bool firstField = true;
+
+				foreach (var property in properties)
+				{
+					if (RqlUtilities.CheckForInclusion(property, selectFields, false))
+					{
+						AppendPropertyForRead(sql, tableAttribute, property, ref firstField);
+					}
+				}
+
+				AppendFromClause(sql, tableAttribute);
+				AppendWhereClause(sql, whereClause);
+				sql.AppendLine(") AS T0");
+			}
 			else
-				sql.AppendLine($"DELETE FROM {OB}{tableAttribute.Schema}{CB}.{OB}{tableAttribute.Name}{CB}");
+			{
+				sql.Append("SELECT COUNT(*) AS [RecordCount]");
 
-			AppendWhereClause(sql, whereClause);
+				AppendFromClause(sql, tableAttribute);
+				AppendWhereClause(sql, whereClause);
+			}
 
 			return sql.ToString();
 		}
+		#endregion
+
+		#region Select Collection
+		/// <summary>
+		/// Builds the SQL query for the collection
+		/// </summary>
+		/// <typeparam name="T">The type of entites to retrieve.</typeparam>
+		/// <param name="node">The <see cref="RqlNode"/> that filters the result set.</param>
+		/// <param name="parameters">The list of <see cref="SqlParameter"/> that must be bound to execute the SQL statement.</param>
+		/// <param name="NoPaging">Do not page results even if the result set exceeds the system defined limit. Default value = false.</param>
+		/// <returns>The collection of entities specified in the <see cref="RqlNode"/> filter.</returns>
+		public string GenerateResourceCollectionStatement<T>(RqlNode node, out List<SqlParameter> parameters, bool NoPaging = false)
+		{
+			return GenerateResourceCollectionStatement(typeof(T), node, out parameters, NoPaging);
+		}
 
 		/// <summary>
-		/// Builds the SQL query to add an entity to the datastore
+		/// Builds the SQL query for the collection
+		/// </summary>
+		/// <param name="entityType">The type of entites to retrieve.</param>
+		/// <param name="node">The <see cref="RqlNode"/> that filters the result set.</param>
+		/// <param name="parameters">The list of <see cref="SqlParameter"/> that must be bound to execute the SQL statement.</param>
+		/// <param name="NoPaging">Do not page results even if the result set exceeds the system defined limit. Default value = false.</param>
+		/// <returns>The collection of entities specified in the <see cref="RqlNode"/> filter.</returns>
+		/// <remarks>Using NoPaging = <see langword="false"/> is more efficient, but should only be used when you know the result set
+		/// will contain only a reasonably small number of records.</remarks>
+		public string GenerateResourceCollectionStatement(Type entityType, RqlNode node, out List<SqlParameter> parameters, bool NoPaging = false)
+		{
+			parameters = new List<SqlParameter>();
+
+			if (node.Operation == RqlOperation.NOOP)
+				return BuildStandardPagedCollection(entityType, node, parameters);
+
+			RqlNode? pageFilter = node.ExtractLimitClause();
+
+			if (!node.Contains(RqlOperation.AGGREGATE) && (node.Contains(RqlOperation.MAX) ||
+															node.Contains(RqlOperation.MIN) ||
+															node.Contains(RqlOperation.MEAN) ||
+															node.Contains(RqlOperation.COUNT) ||
+															node.Contains(RqlOperation.SUM)))
+			{
+				//	Column Aggregates are never paged
+				return BuildColumnAggregateCollection(entityType, node, parameters);
+			}
+			else if (node.Contains(RqlOperation.VALUES))
+			{
+				//	Values collections are never paged
+				return BuildValuesCollection(entityType, node, parameters, NoPaging);
+			}
+			else if (NoPaging && pageFilter == null)
+			{
+				//	We need to build a non-paged collection
+
+				if (node.Contains(RqlOperation.AGGREGATE))
+					return BuildAggregateNonPagedCollection(entityType, node, parameters);
+				else if (node.Contains(RqlOperation.DISTINCT))
+					return BuildDistinctNonPagedCollection(entityType, node, parameters);
+				else
+					return BuidStandardNonPagedCollection(entityType, node, parameters);
+			}
+			else
+			{
+				//	We need to build a paged collection
+
+				if (node.Contains(RqlOperation.AGGREGATE))
+					return BuildAggregatePagedCollection(entityType, node, pageFilter, parameters);
+				else if (node.Contains(RqlOperation.DISTINCT))
+					return BuildDistinctPagedCollection(entityType, node, pageFilter, parameters);
+				else
+					return BuildStandardPagedCollection(entityType, node, parameters);
+			}
+		}
+		#endregion
+
+		#region Insert
+		/// <summary>
+		/// Builds the SQL query to add an entity
+		/// </summary>
+		/// <typeparam name="T">The type of entity to add</typeparam>
+		/// <param name="item">The entity to be added</param>
+		/// <param name="parameters">The list of <see cref="SqlParameter"/> that must be bound to execute the SQL statement.</param>
+		/// <param name="identityProperty">The <see cref="PropertyInfo"/> for the identity column if one exists; <see langword="null"/> otherwise.</param>
+		/// <returns>The SQL Statement that will insert the new entity, and return the value of the new identity column, if one exists.</returns>
+		/// <remarks>If an identity column for this entity exists, its value will be ignored on input, and the new value will be returned.</remarks>
+		public string GenerateInsertStatement<T>(T item, out List<SqlParameter> parameters, out PropertyInfo? identityProperty) where T : class
+        {
+			return GenerateInsertStatement(typeof(T), item, out parameters, out identityProperty);
+        }
+
+		/// <summary>
+		/// Builds the SQL query to add an entity
 		/// </summary>
 		/// <param name="entityType">The type of entity to add</param>
 		/// <param name="item">The entity to be added</param>
-		/// <param name="parameters">The list of SQL parameters that must be bound to execute the SQL statement</param>
-		/// <param name="identityProperty"></param>
-		/// <returns></returns>
-		public string GenerateInsertStatement(Type entityType, object item, out List<SqlParameter> parameters, out PropertyInfo? identityProperty) 
+		/// <param name="parameters">The list of <see cref="SqlParameter"/> that must be bound to execute the SQL statement.</param>
+		/// <param name="identityProperty">The <see cref="PropertyInfo"/> for the identity column if one exists; <see langword="null"/> otherwise.</param>
+		/// <returns>The SQL Statement that will insert the new entity, and return the value of the new identity column, if one exists.</returns>
+		/// <remarks>If an identity column for this entity exists, its value will be ignored on input, and the new value will be returned.</remarks>
+		public string GenerateInsertStatement(Type entityType, object item, out List<SqlParameter> parameters, out PropertyInfo? identityProperty)
 		{
 			parameters = new List<SqlParameter>();	
 			var tableAttribute = entityType.GetCustomAttribute<Table>();
@@ -260,26 +432,130 @@ namespace Tense.Rql.SqlServer
 
 			return sql.ToString();
 		}
+		#endregion
 
+		#region Update
 		/// <summary>
-		/// Builds the SQL query for a single result
+		/// Builds the SQL Query to update items in the datastore
 		/// </summary>
-		/// <param name="node"></param>
-		/// <param name="parameters">The list of SQL parameters that must be bound to execute the SQL statement</param>
-		/// <returns></returns>
-		public string GenerateSelectSingle<T>(RqlNode node, out List<SqlParameter> parameters)
+		/// <typeparam name="T">The type of object to update.</typeparam>
+		/// <param name="item">The item to update</param>
+		/// <param name="parameters">The list of <see cref="SqlParameter"/> that must be bound to execute the SQL statement.</param>
+		/// <param name="node">The <see cref="RqlNode"/> that further constrains the update.</param>
+		/// <returns>The SQL query used to update items in the datastore</returns>
+		/// <remarks>You can use the <see cref="RqlNode"/> to update multiple items. If the <see cref="RqlNode"/> contains a select clause,
+		/// only the members in the select clause will be updated. The select clause will override the SkipUpdate attribute in the
+		/// entity model.</remarks>
+		public string GenerateUpdateStatement<T>(object item, RqlNode node, out List<SqlParameter> parameters) where T : class
         {
-			return GenerateSelectSingle(typeof(T), node, out parameters);
+			return GenerateUpdateStatement(typeof(T), item, node, out parameters);
         }
 
 		/// <summary>
-		/// Builds the SQL query for a single result
+		/// Builds the SQL Query to update items in the datastore
 		/// </summary>
 		/// <param name="entityType">The type of object to update.</param>
-		/// <param name="node"></param>
-		/// <param name="parameters">The list of SQL parameters that must be bound to execute the SQL statement</param>
-		/// <returns></returns>
-		public string GenerateSelectSingle(Type entityType, RqlNode node, out List<SqlParameter> parameters)
+		/// <param name="item">The item to update</param>
+		/// <param name="parameters">The list of <see cref="SqlParameter"/>s used in the query.</param>
+		/// <param name="node">The <see cref="RqlNode"/> that further constrains the update.</param>
+		/// <returns>The SQL query used to update items in the datastore</returns>		
+		/// <remarks>You can use the <see cref="RqlNode"/> to update multiple items. If the <see cref="RqlNode"/> contains a select clause,
+		/// only the members in the select clause will be updated. The select clause will override the SkipUpdate attribute in the
+		/// entity model.</remarks>
+		public string GenerateUpdateStatement(Type entityType, object item, RqlNode node, out List<SqlParameter> parameters)
+		{
+			parameters = new List<SqlParameter>();
+			var tableAttribute = entityType.GetCustomAttribute<Table>();
+			var properties = entityType.GetProperties();
+			var whereClause = ParseWhereClause(entityType, node, null, tableAttribute, properties, parameters);
+			RqlNode? selectClause = node.ExtractSelectClause();
+
+			if (tableAttribute == null)
+				throw new InvalidCastException($"The class {item.GetType().Name} is not an entity model.");
+
+			var sql = new StringBuilder();
+
+			if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
+				sql.AppendLine($"UPDATE {OB}{tableAttribute.Name}{CB}");
+			else
+				sql.AppendLine($"UPDATE {OB}{tableAttribute.Schema}{CB}.{OB}{tableAttribute.Name}{CB}");
+
+			bool first = true;
+
+			foreach (var property in properties)
+			{
+				var memberAttribute = property.GetCustomAttribute<MemberAttribute>();
+
+				if (memberAttribute != null)
+				{
+					bool includeMember = true;
+
+					if (selectClause is not null)
+					{
+						includeMember = RqlUtilities.CheckForInclusion(property, selectClause);
+					}
+					else if (memberAttribute.SkipUpdate)
+					{
+						includeMember = false;
+					}
+
+					if (includeMember)
+					{
+						var tableName = string.IsNullOrWhiteSpace(memberAttribute.TableName) ? tableAttribute.Name : memberAttribute.TableName;
+						var columnName = string.IsNullOrWhiteSpace(memberAttribute.ColumnName) ? property.Name : memberAttribute.ColumnName;
+
+						if (string.Equals(tableName, tableAttribute.Name, StringComparison.InvariantCulture))
+						{
+							if (!memberAttribute.IsPrimaryKey && !memberAttribute.AutoField)
+							{
+								var parameterName = $"@P{parameters.Count}";
+								var propValue = property.GetValue(item);
+								parameters.Add(BuildSqlParameter(parameterName, property, propValue));
+
+								if (first)
+								{
+									sql.Append($" SET {OB}{columnName}{CB} = {parameterName}");
+									first = false;
+								}
+								else
+								{
+									sql.AppendLine(",");
+									sql.Append($"     {OB}{columnName}{CB} = {parameterName}");
+								}
+							}
+						}
+					}
+				}
+			}
+
+			AppendWhereClause(sql, whereClause);
+			return sql.ToString();
+		}
+		#endregion
+
+		#region Delete
+		/// <summary>
+		/// Builds a query to delete an entity (or entities) from the datastore
+		/// </summary>
+		/// <typeparam name="T">The type of entity to delete.</typeparam>
+		/// <param name="parameters">The list of <see cref="SqlParameter"/> that must be bound to execute the SQL statement.</param>
+		/// <param name="node">The <see cref="RqlNode"/> that further constrains the delete.</param>
+		/// <returns>The SQL Statement to delete the entity</returns>
+		/// <remarks>You can use the <see cref="RqlNode"/> to delete multiple items.</remarks>
+		public string GenerateDeleteStatement<T>(RqlNode node, out List<SqlParameter> parameters)
+		{
+			return GenerateDeleteStatement(typeof(T), node, out parameters);
+		}
+
+		/// <summary>
+		/// Builds a query to delete an entity (or entities) from the datastore
+		/// </summary>
+		/// <param name="entityType">The type of entity to delete.</param>
+		/// <param name="parameters">The list of <see cref="SqlParameter"/> that must be bound to execute the SQL statement.</param>
+		/// <param name="node">The <see cref="RqlNode"/> that further constrains the delete.</param>
+		/// <returns>The SQL Statement to delete the entity</returns>
+		/// <remarks>You can use the <see cref="RqlNode"/> to delete multiple items.</remarks>
+		public string GenerateDeleteStatement(Type entityType, RqlNode node, out List<SqlParameter> parameters)
 		{
 			parameters = new List<SqlParameter>();
 			var tableAttribute = entityType.GetCustomAttribute<Table>();
@@ -289,205 +565,23 @@ namespace Tense.Rql.SqlServer
 
 			var properties = entityType.GetProperties();
 			var sql = new StringBuilder();
-			var whereClause = ParseWhereClause(entityType, node, null, tableAttribute, properties, parameters);
-			var orderByClause = ParseOrderByClause(entityType, node);
-			var selectFields = node?.Find(RqlOperation.SELECT);
-			bool firstField = true;
 
-			sql.Append("SELECT ");
+			string whereClause = ParseWhereClause(entityType, node, null, tableAttribute, properties, parameters);
 
-			if (node?.Find(RqlOperation.DISTINCT) != null)
-			{
-				sql.Append("DISTINCT ");
-			}
+			if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
+				sql.AppendLine($"DELETE FROM {OB}{tableAttribute.Name}{CB}");
+			else
+				sql.AppendLine($"DELETE FROM {OB}{tableAttribute.Schema}{CB}.{OB}{tableAttribute.Name}{CB}");
 
-			if (node?.Find(RqlOperation.FIRST) != null)
-			{
-				sql.Append("TOP 1 ");
-			}
-
-			foreach (var property in properties)
-			{
-				if (RqlUtilities.CheckForInclusion(property, selectFields))
-				{
-					AppendPropertyForRead(sql, tableAttribute, property, ref firstField);
-				}
-			}
-
-			AppendFromClause(sql, tableAttribute);
 			AppendWhereClause(sql, whereClause);
-			AppendOrderByClause(sql, orderByClause);
 
 			return sql.ToString();
 		}
+		#endregion
+		#endregion
 
-		/// <summary>
-		/// Builds the count query for the collection
-		/// </summary>
-		/// <param name="node">The <see cref="RqlNode"/> that filters the result set.</param>
-		/// <param name="parameters">The list of <see cref="SqlParameter"/>s used in the SQL Command.</param>
-		/// <param name="entityType">The type of entities to retrieve</param>
-		/// <returns></returns>
-		public string GenerateCollectionCountStatement(Type entityType, RqlNode node, out List<SqlParameter> parameters)
-		{
-			parameters = new List<SqlParameter>();	
-			var tableAttribute = entityType.GetCustomAttribute<Table>(false);
-
-			if (tableAttribute == null)
-				throw new InvalidCastException($"The class {entityType.Name} is not an entity model.");
-
-			var properties = entityType.GetProperties();
-			var sql = new StringBuilder();
-			var whereClause = ParseWhereClause(entityType, node, null, tableAttribute, properties, parameters);
-
-			if (node.Find(RqlOperation.AGGREGATE) is RqlNode aggregateNode)
-			{
-				sql.AppendLine("SELECT COUNT(*) as [RecordCount]");
-				sql.Append("  FROM ( SELECT ");
-
-				bool firstMember = true;
-
-				foreach (RqlNode childNode in aggregateNode)
-				{
-					if (childNode.Operation == RqlOperation.PROPERTY)
-					{
-						var property = properties.FirstOrDefault(p => string.Equals(childNode.Value<string>(0), p.Name, StringComparison.OrdinalIgnoreCase));
-						AppendPropertyForRead(sql, tableAttribute, property, ref firstMember);
-					}
-				}
-
-				AppendFromClause(sql, tableAttribute);
-				AppendWhereClause(sql, whereClause);
-				AppendGroupByClause(sql, aggregateNode, tableAttribute, properties);
-
-				sql.Append(") as T0");
-			}
-			else if (node.Find(RqlOperation.MAX) != null ||
-					 node.Find(RqlOperation.MIN) != null ||
-					 node.Find(RqlOperation.MEAN) != null ||
-					 node.Find(RqlOperation.SUM) != null)
-			{
-				sql.Append("SELECT 1 AS [RecordCount]");
-			}
-			if (node.Find(RqlOperation.VALUES) is RqlNode valuesNode)
-			{
-				sql.Append("SELECT COUNT(*) as [RecordCount] FROM (SELECT DISTINCT ");
-				bool firstMember = true;
-
-				var propertyNode = valuesNode.NonNullValue<RqlNode>(0);
-				var property = properties.FirstOrDefault(p => string.Equals(propertyNode.Value<string>(0), p.Name, StringComparison.OrdinalIgnoreCase));
-				AppendProperty(sql, tableAttribute, property, ref firstMember);
-				AppendFromClause(sql, tableAttribute);
-				AppendWhereClause(sql, whereClause);
-				sql.Append(") AS T0");
-			}
-			else if (node.Find(RqlOperation.FIRST) is not null)
-			{
-				sql.Append("SELECT 1 AS [RecordCount]");
-			}
-			else if (node.Find(RqlOperation.DISTINCT) != null)
-			{
-				var selectFields = node?.Find(RqlOperation.SELECT);
-
-				sql.Append("SELECT COUNT(*) AS [RecordCount] FROM (SELECT DISTINCT ");
-
-				bool firstField = true;
-
-				foreach (var property in properties)
-				{
-					if (RqlUtilities.CheckForInclusion(property, selectFields, false))
-					{
-						AppendPropertyForRead(sql, tableAttribute, property, ref firstField);
-					}
-				}
-
-				AppendFromClause(sql, tableAttribute);
-				AppendWhereClause(sql, whereClause);
-				sql.AppendLine(") AS T0");
-			}
-			else
-			{
-				sql.Append("SELECT COUNT(*) AS [RecordCount]");
-
-				AppendFromClause(sql, tableAttribute);
-				AppendWhereClause(sql, whereClause);
-			}
-
-			return sql.ToString();
-		}
-
-		/// <summary>
-		/// Builds the SQL query for the collection
-		/// </summary>
-		/// <param name="node">The compiled RQL query</param>
-		/// <param name="count">The number of records in the collection</param>
-		/// <param name="batchLimit">The maximum number of items that can be included in a collection batch</param>
-		/// <param name="parameters">The parameters for the SQL query</param>
-		/// <param name="NoPaging">Do not page results even if the result set exceeds the system defined limit. Default value = false.</param>
-		/// <returns></returns>
-		public string GenerateResourceCollectionStatement<T>(RqlNode node, int count, int batchLimit, out List<SqlParameter> parameters, bool NoPaging = false)
-        {
-			return GenerateResourceCollectionStatement(typeof(T), node, count, batchLimit, out parameters, NoPaging);
-		}
-
-		/// <summary>
-		/// Builds the SQL query for the collection
-		/// </summary>
-		/// <param name="entityType">The type of entity to query.</param>
-		/// <param name="node">The compiled RQL query</param>
-		/// <param name="count">The number of records in the collection</param>
-		/// <param name="batchLimit">The maximum number of items that can be included in a collection batch</param>
-		/// <param name="parameters">The parameters for the SQL query</param>
-		/// <param name="NoPaging">Do not page results even if the result set exceeds the system defined limit. Default value = false.</param>
-		/// <returns></returns>
-		public string GenerateResourceCollectionStatement(Type entityType, RqlNode node, int count, int batchLimit, out List<SqlParameter> parameters, bool NoPaging = false)
-		{
-			parameters = new List<SqlParameter>();
-
-			if (node.Operation == RqlOperation.NOOP)
-				return BuildStandardPagedCollection(entityType, node, count, parameters);
-
-			RqlNode? pageFilter = node.ExtractLimitClause();
-
-			if (!node.Contains(RqlOperation.AGGREGATE) && (node.Contains(RqlOperation.MAX) ||
-															node.Contains(RqlOperation.MIN) ||
-															node.Contains(RqlOperation.MEAN) ||
-															node.Contains(RqlOperation.COUNT) ||
-															node.Contains(RqlOperation.SUM)))
-			{
-				//	Column Aggregates are never paged
-				return BuildColumnAggregateCollection(entityType, node, parameters);
-			}
-			else if (node.Contains(RqlOperation.VALUES))
-			{
-				//	Values collections are never paged
-				return BuildValuesCollection(entityType, node, count, batchLimit, parameters, NoPaging);
-			}
-			else if (NoPaging || (count < batchLimit && pageFilter == null))
-			{
-				//	We need to build a non-paged collection
-
-				if (node.Contains(RqlOperation.AGGREGATE))
-					return BuildAggregateNonPagedCollection(entityType, node, parameters);
-				else if (node.Contains(RqlOperation.DISTINCT))
-					return BuildDistinctNonPagedCollection(entityType, node, parameters);
-				else
-					return BuidStandardNonPagedCollection(entityType, node, parameters);
-			}
-			else
-			{
-				//	We need to build a paged collection
-
-				if (node.Contains(RqlOperation.AGGREGATE))
-					return BuildAggregatePagedCollection(entityType, node, count, pageFilter, parameters);
-				else if (node.Contains(RqlOperation.DISTINCT))
-					return BuildDistinctPagedCollection(entityType, node, count, pageFilter, parameters);
-				else
-					return BuildStandardPagedCollection(entityType, node, count, parameters);
-			}
-		}
-
-		private string BuildStandardPagedCollection(Type entityType, RqlNode node, int count, List<SqlParameter> parameters)
+		#region Collection generation helper functions
+		private string BuildStandardPagedCollection(Type entityType, RqlNode node, List<SqlParameter> parameters)
 		{
 			var tableAttribute = entityType.GetCustomAttribute<Table>(false);
 
@@ -574,6 +668,8 @@ namespace Tense.Rql.SqlServer
 
 			RqlNode? pageFilter = node?.ExtractLimitClause();
 
+			int count = _batchLimit;
+
 			if (pageFilter != null)
 			{
 				start = pageFilter.NonNullValue<int>(0);
@@ -626,7 +722,7 @@ namespace Tense.Rql.SqlServer
 			return sql.ToString();
 		}
 
-		private string BuildDistinctPagedCollection(Type entityType, RqlNode node, int count, RqlNode? pageFilter, List<SqlParameter> parameters)
+		private string BuildDistinctPagedCollection(Type entityType, RqlNode node, RqlNode? pageFilter, List<SqlParameter> parameters)
 		{
 			var tableAttribute = entityType.GetCustomAttribute<Table>(false);
 
@@ -708,6 +804,7 @@ namespace Tense.Rql.SqlServer
 			sql.Append(") as [T1]");
 
 			int start = 1;
+			int count = _batchLimit;
 
 			if (pageFilter != null)
 			{
@@ -775,7 +872,7 @@ namespace Tense.Rql.SqlServer
 			return sql.ToString();
 		}
 
-		private string BuildValuesCollection(Type entityType, RqlNode node, int count, int batchLimit, List<SqlParameter> parameters, bool NoPaging)
+		private string BuildValuesCollection(Type entityType, RqlNode node, List<SqlParameter> parameters, bool NoPaging)
 		{
 			var tableAttribute = entityType.GetCustomAttribute<Table>(false);
 
@@ -797,7 +894,7 @@ namespace Tense.Rql.SqlServer
 
 			if (valuesNode != null)
 			{
-				if (NoPaging || (count < batchLimit && pageFilter == null))
+				if (NoPaging && pageFilter == null)
 				{
 					sql.Append("select distinct ");
 					bool firstMember = true;
@@ -857,6 +954,7 @@ namespace Tense.Rql.SqlServer
 					AppendWhereClause(sql, whereClause);
 
 					int start = 1;
+					int count = _batchLimit;
 
 					if (pageFilter != null)
 					{
@@ -910,7 +1008,7 @@ namespace Tense.Rql.SqlServer
 			return sql.ToString();
 		}
 
-		private string BuildAggregatePagedCollection(Type entityType, RqlNode node, int count, RqlNode? pageFilter, List<SqlParameter> parameters)
+		private string BuildAggregatePagedCollection(Type entityType, RqlNode node, RqlNode? pageFilter, List<SqlParameter> parameters)
 		{
 			var tableAttribute = entityType.GetCustomAttribute<Table>(false);
 
@@ -1092,6 +1190,7 @@ namespace Tense.Rql.SqlServer
 				AppendGroupByClause(sql, aggregateNode, tableAttribute, properties);
 
 				int start = 1;
+				int count = _batchLimit;
 
 				if (pageFilter != null)
 				{
@@ -1183,22 +1282,9 @@ namespace Tense.Rql.SqlServer
 
 			return sql.ToString();
 		}
+		#endregion
 
 		#region Helper Functions
-		/// <summary>
-		/// Returns a formatted WHERE clause representation of the filters in the query string
-		/// </summary>
-		/// <param name="node">The RQL node representation of the query string</param>
-		/// <param name="op"></param>
-		/// <param name="tableAttribute">The table attributes associated with type T</param>
-		/// <param name="properties">The list of properties of type T</param>
-		/// <param name="parameters"></param>
-		/// <returns></returns>
-		private string ParseWhereClause<T>(RqlNode node, string? op, Table tableAttribute, IEnumerable<PropertyInfo> properties, List<SqlParameter> parameters)
-        {
-			return ParseWhereClause(typeof(T), node, op, tableAttribute, properties, parameters);
-        }
-
 		/// <summary>
 		/// Returns a formatted WHERE clause representation of the filters in the query string
 		/// </summary>
