@@ -56,7 +56,7 @@ namespace Tense.Rql.SqlServer
 		public string GenerateSelectSingle(Type entityType, RqlNode node, out List<SqlParameter> parameters)
 		{
 			parameters = new List<SqlParameter>();
-			var tableAttribute = entityType.GetCustomAttribute<Table>();
+			var tableAttribute = entityType.GetCustomAttribute<TableAttribute>();
 
 			if (tableAttribute == null)
 				throw new InvalidCastException($"The class {entityType.Name} is not an entity model.");
@@ -121,7 +121,7 @@ namespace Tense.Rql.SqlServer
 		public string GenerateCollectionCountStatement(Type entityType, RqlNode node, out List<SqlParameter> parameters)
 		{
 			parameters = new List<SqlParameter>();
-			var tableAttribute = entityType.GetCustomAttribute<Table>(false);
+			var tableAttribute = entityType.GetCustomAttribute<TableAttribute>(false);
 
 			if (tableAttribute == null)
 				throw new InvalidCastException($"The class {entityType.Name} is not an entity model.");
@@ -306,7 +306,7 @@ namespace Tense.Rql.SqlServer
 		public string GenerateInsertStatement(Type entityType, object item, out List<SqlParameter> parameters, out PropertyInfo? identityProperty)
 		{
 			parameters = new List<SqlParameter>();	
-			var tableAttribute = entityType.GetCustomAttribute<Table>();
+			var tableAttribute = entityType.GetCustomAttribute<TableAttribute>();
 
 			if (tableAttribute == null)
 				throw new InvalidCastException($"The class {entityType.Name} is not an entity model.");
@@ -330,7 +330,6 @@ namespace Tense.Rql.SqlServer
 
 				if (memberAttribute != null)
 				{
-					var tableName = string.IsNullOrWhiteSpace(memberAttribute.TableName) ? tableAttribute.Name : memberAttribute.TableName;
 					var columnName = string.IsNullOrWhiteSpace(memberAttribute.ColumnName) ? property.Name : memberAttribute.ColumnName;
 
 					bool includeField = true;
@@ -348,7 +347,7 @@ namespace Tense.Rql.SqlServer
 						includeField = false;
 
 					//	Only columns that belong to the main table are inserted
-					if (!string.Equals(tableName, tableAttribute.Name, StringComparison.InvariantCulture))
+					if (!string.Equals(tableAttribute.Name, tableAttribute.Name, StringComparison.InvariantCulture))
 						includeField = false;
 
 					if (includeField)
@@ -375,12 +374,10 @@ namespace Tense.Rql.SqlServer
 
 					if (memberAttribute != null)
 					{
-						var tableName = string.IsNullOrWhiteSpace(memberAttribute.TableName) ? tableAttribute.Name : memberAttribute.TableName;
 						var columnName = string.IsNullOrWhiteSpace(memberAttribute.ColumnName) ? property.Name : memberAttribute.ColumnName;
 
-						if (string.Compare(tableName, tableAttribute.Name, true) == 0)
-							if (memberAttribute.IsIdentity)
-								sql.AppendLine($" OUTPUT inserted.{OB}{columnName}{CB}");
+						if (memberAttribute.IsIdentity)
+							sql.AppendLine($" OUTPUT inserted.{OB}{columnName}{CB}");
 					}
 				}
 			}
@@ -394,8 +391,6 @@ namespace Tense.Rql.SqlServer
 
 				if (memberAttribute != null)
 				{
-					var tableName = string.IsNullOrWhiteSpace(memberAttribute.TableName) ? tableAttribute.Name : memberAttribute.TableName;
-
 					bool includeField = true;
 
 					//	Don't include identity columns
@@ -404,10 +399,6 @@ namespace Tense.Rql.SqlServer
 
 					//	Don't include auto fields
 					if (memberAttribute.AutoField)
-						includeField = false;
-
-					//	Don't include foreign columns
-					if (string.Compare(tableName, tableAttribute.Name, true) != 0)
 						includeField = false;
 
 					if (includeField)
@@ -465,7 +456,7 @@ namespace Tense.Rql.SqlServer
 		public string GenerateUpdateStatement(Type entityType, object item, RqlNode node, out List<SqlParameter> parameters)
 		{
 			parameters = new List<SqlParameter>();
-			var tableAttribute = entityType.GetCustomAttribute<Table>();
+			var tableAttribute = entityType.GetCustomAttribute<TableAttribute>();
 			var properties = entityType.GetProperties();
 			var whereClause = ParseWhereClause(entityType, node, null, tableAttribute, properties, parameters);
 			RqlNode? selectClause = node.ExtractSelectClause();
@@ -501,27 +492,23 @@ namespace Tense.Rql.SqlServer
 
 					if (includeMember)
 					{
-						var tableName = string.IsNullOrWhiteSpace(memberAttribute.TableName) ? tableAttribute.Name : memberAttribute.TableName;
 						var columnName = string.IsNullOrWhiteSpace(memberAttribute.ColumnName) ? property.Name : memberAttribute.ColumnName;
 
-						if (string.Equals(tableName, tableAttribute.Name, StringComparison.InvariantCulture))
+						if (!memberAttribute.IsPrimaryKey && !memberAttribute.AutoField)
 						{
-							if (!memberAttribute.IsPrimaryKey && !memberAttribute.AutoField)
-							{
-								var parameterName = $"@P{parameters.Count}";
-								var propValue = property.GetValue(item);
-								parameters.Add(BuildSqlParameter(parameterName, property, propValue));
+							var parameterName = $"@P{parameters.Count}";
+							var propValue = property.GetValue(item);
+							parameters.Add(BuildSqlParameter(parameterName, property, propValue));
 
-								if (first)
-								{
-									sql.Append($" SET {OB}{columnName}{CB} = {parameterName}");
-									first = false;
-								}
-								else
-								{
-									sql.AppendLine(",");
-									sql.Append($"     {OB}{columnName}{CB} = {parameterName}");
-								}
+							if (first)
+							{
+								sql.Append($" SET {OB}{columnName}{CB} = {parameterName}");
+								first = false;
+							}
+							else
+							{
+								sql.AppendLine(",");
+								sql.Append($"     {OB}{columnName}{CB} = {parameterName}");
 							}
 						}
 					}
@@ -558,7 +545,7 @@ namespace Tense.Rql.SqlServer
 		public string GenerateDeleteStatement(Type entityType, RqlNode node, out List<SqlParameter> parameters)
 		{
 			parameters = new List<SqlParameter>();
-			var tableAttribute = entityType.GetCustomAttribute<Table>();
+			var tableAttribute = entityType.GetCustomAttribute<TableAttribute>();
 
 			if (tableAttribute == null)
 				throw new InvalidCastException($"The class {entityType.Name} is not an entity model.");
@@ -583,7 +570,7 @@ namespace Tense.Rql.SqlServer
 		#region Collection generation helper functions
 		private string BuildStandardPagedCollection(Type entityType, RqlNode node, List<SqlParameter> parameters)
 		{
-			var tableAttribute = entityType.GetCustomAttribute<Table>(false);
+			var tableAttribute = entityType.GetCustomAttribute<TableAttribute>(false);
 
 			if (tableAttribute == null)
 				throw new InvalidCastException($"The class {entityType.Name} is not an entity model.");
@@ -688,7 +675,7 @@ namespace Tense.Rql.SqlServer
 
 		private string BuidStandardNonPagedCollection(Type entityType, RqlNode node, List<SqlParameter> parameters)
 		{
-			var tableAttribute = entityType.GetCustomAttribute<Table>(false);
+			var tableAttribute = entityType.GetCustomAttribute<TableAttribute>(false);
 
 			if (tableAttribute == null)
 				throw new InvalidCastException($"The class {entityType.Name} is not an entity model.");
@@ -724,7 +711,7 @@ namespace Tense.Rql.SqlServer
 
 		private string BuildDistinctPagedCollection(Type entityType, RqlNode node, RqlNode? pageFilter, List<SqlParameter> parameters)
 		{
-			var tableAttribute = entityType.GetCustomAttribute<Table>(false);
+			var tableAttribute = entityType.GetCustomAttribute<TableAttribute>(false);
 
 			if (tableAttribute == null)
 				throw new InvalidCastException($"The class {entityType.Name} is not an entity model.");
@@ -824,7 +811,7 @@ namespace Tense.Rql.SqlServer
 
 		private string BuildDistinctNonPagedCollection(Type entityType, RqlNode node, List<SqlParameter> parameters)
 		{
-			var tableAttribute = entityType.GetCustomAttribute<Table>(false);
+			var tableAttribute = entityType.GetCustomAttribute<TableAttribute>(false);
 
 			if (tableAttribute == null)
 				throw new InvalidCastException($"The class {entityType.Name} is not an entity model.");
@@ -874,7 +861,7 @@ namespace Tense.Rql.SqlServer
 
 		private string BuildValuesCollection(Type entityType, RqlNode node, List<SqlParameter> parameters, bool NoPaging)
 		{
-			var tableAttribute = entityType.GetCustomAttribute<Table>(false);
+			var tableAttribute = entityType.GetCustomAttribute<TableAttribute>(false);
 
 			if (tableAttribute == null)
 				throw new InvalidCastException($"The class {entityType.Name} is not an entity model.");
@@ -976,7 +963,7 @@ namespace Tense.Rql.SqlServer
 
 		private string BuildColumnAggregateCollection(Type entityType, RqlNode node, List<SqlParameter> parameters)
 		{
-			var tableAttribute = entityType.GetCustomAttribute<Table>(false);
+			var tableAttribute = entityType.GetCustomAttribute<TableAttribute>(false);
 
 			if (tableAttribute == null)
 				throw new InvalidCastException($"The class {entityType.Name} is not an entity model.");
@@ -1010,7 +997,7 @@ namespace Tense.Rql.SqlServer
 
 		private string BuildAggregatePagedCollection(Type entityType, RqlNode node, RqlNode? pageFilter, List<SqlParameter> parameters)
 		{
-			var tableAttribute = entityType.GetCustomAttribute<Table>(false);
+			var tableAttribute = entityType.GetCustomAttribute<TableAttribute>(false);
 
 			if (tableAttribute == null)
 				throw new InvalidCastException($"The class {entityType.Name} is not an entity model.");
@@ -1102,18 +1089,12 @@ namespace Tense.Rql.SqlServer
 
 						if (primaryKeyProperty != null)
 						{
-							var tableName =
-								string.IsNullOrWhiteSpace(primaryKeyProperty.GetCustomAttribute<MemberAttribute>().TableName) ? tableAttribute.Name : primaryKeyProperty.GetCustomAttribute<MemberAttribute>().TableName;
-
-							var schema =
-								string.IsNullOrWhiteSpace(primaryKeyProperty.GetCustomAttribute<MemberAttribute>().Schema) ? tableAttribute.Schema : primaryKeyProperty.GetCustomAttribute<MemberAttribute>().Schema;
-
 							var columnName = string.IsNullOrWhiteSpace(primaryKeyProperty.GetCustomAttribute<MemberAttribute>().ColumnName) ? primaryKeyProperty.Name : primaryKeyProperty.GetCustomAttribute<MemberAttribute>().ColumnName;
 
-							if (string.IsNullOrWhiteSpace(schema))
-								sql.Append($" ORDER BY MAX([{tableName}].[{columnName}]) asc ");
+							if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
+								sql.Append($" ORDER BY MAX([{tableAttribute.Name}].[{columnName}]) asc ");
 							else
-								sql.Append($" ORDER BY MAX([{schema}].[{tableName}].[{columnName}]) asc ");
+								sql.Append($" ORDER BY MAX([{tableAttribute.Schema}].[{tableAttribute.Name}].[{columnName}]) asc ");
 						}
 					}
 				}
@@ -1169,17 +1150,15 @@ namespace Tense.Rql.SqlServer
 
 						if (memberAttribute != null)
 						{
-							var tableName = string.IsNullOrWhiteSpace(memberAttribute.TableName) ? tableAttribute.Name : memberAttribute.TableName;
-							var schema = string.IsNullOrWhiteSpace(memberAttribute.Schema) ? tableAttribute.Schema : memberAttribute.Schema;
 							var columnName = string.IsNullOrWhiteSpace(memberAttribute.ColumnName) ? property.Name : memberAttribute.ColumnName;
 
-							if (string.IsNullOrWhiteSpace(schema))
+							if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
 							{
-								sql.Append($"{operation}([{tableName}].[{columnName}]) as {propertyNode.Value<string>(0)}");
+								sql.Append($"{operation}([{tableAttribute.Name}].[{columnName}]) as {propertyNode.Value<string>(0)}");
 							}
 							else
 							{
-								sql.Append($"{operation}([{schema}].[{tableName}].[{columnName}]) as {propertyNode.Value<string>(0)}");
+								sql.Append($"{operation}([{tableAttribute.Schema}].[{tableAttribute.Name}].[{columnName}]) as {propertyNode.Value<string>(0)}");
 							}
 						}
 					}
@@ -1211,7 +1190,7 @@ namespace Tense.Rql.SqlServer
 
 		private string BuildAggregateNonPagedCollection(Type entityType, RqlNode node, List<SqlParameter> parameters)
 		{
-			var tableAttribute = entityType.GetCustomAttribute<Table>(false);
+			var tableAttribute = entityType.GetCustomAttribute<TableAttribute>(false);
 
 			if (tableAttribute == null)
 				throw new InvalidCastException($"The class {entityType.Name} is not an entity model.");
@@ -1258,17 +1237,15 @@ namespace Tense.Rql.SqlServer
 
 						if (memberAttribute != null)
 						{
-							var tableName = string.IsNullOrWhiteSpace(memberAttribute.TableName) ? tableAttribute.Name : memberAttribute.TableName;
-							var schema = string.IsNullOrWhiteSpace(memberAttribute.Schema) ? tableAttribute.Schema : memberAttribute.Schema;
 							var columnName = string.IsNullOrWhiteSpace(memberAttribute.ColumnName) ? property.Name : memberAttribute.ColumnName;
 
-							if (string.IsNullOrWhiteSpace(schema))
+							if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
 							{
-								sql.Append($"{operation}([{tableName}].[{columnName}]) as {property.Name}");
+								sql.Append($"{operation}([{tableAttribute.Name}].[{columnName}]) as {property.Name}");
 							}
 							else
 							{
-								sql.Append($"{operation}([{schema}].[{tableName}].[{columnName}]) as {property.Name}");
+								sql.Append($"{operation}([{tableAttribute.Schema}].[{tableAttribute.Name}].[{columnName}]) as {property.Name}");
 							}
 						}
 					}
@@ -1295,7 +1272,7 @@ namespace Tense.Rql.SqlServer
 		/// <param name="properties">The list of properties of type T</param>
 		/// <param name="parameters"></param>
 		/// <returns></returns>
-		private string ParseWhereClause(Type entityType, RqlNode node, string? op, Table tableAttribute, IEnumerable<PropertyInfo> properties, List<SqlParameter> parameters)
+		private string ParseWhereClause(Type entityType, RqlNode node, string? op, TableAttribute tableAttribute, IEnumerable<PropertyInfo> properties, List<SqlParameter> parameters)
 		{
 			if (node.Operation == RqlOperation.NOOP)
 				return string.Empty;
@@ -1392,13 +1369,10 @@ namespace Tense.Rql.SqlServer
 
 							if (memberAttribute != null)
 							{
-								var schema = string.IsNullOrWhiteSpace(memberAttribute.Schema) ? tableAttribute.Schema : memberAttribute.Schema;
-								var tableName = string.IsNullOrWhiteSpace(memberAttribute.TableName) ? tableAttribute.Name : memberAttribute.TableName;
-
-								if (string.IsNullOrWhiteSpace(schema))
-									whereClause.Append($"{OB}{tableName}{CB}.{OB}{property.Name}{CB} IN(");
+								if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
+									whereClause.Append($"{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB} IN(");
 								else
-									whereClause.Append($"{OB}{schema}{CB}.{OB}{tableName}{CB}.{OB}{property.Name}{CB} IN(");
+									whereClause.Append($"{OB}{tableAttribute.Schema}{CB}.{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB} IN(");
 
 								for (int i = 1; i < node.Count; i++)
 								{
@@ -1434,13 +1408,10 @@ namespace Tense.Rql.SqlServer
 
 							if (memberAttribute != null)
 							{
-								var schema = string.IsNullOrWhiteSpace(memberAttribute.Schema) ? tableAttribute.Schema : memberAttribute.Schema;
-								var tableName = string.IsNullOrWhiteSpace(memberAttribute.TableName) ? tableAttribute.Name : memberAttribute.TableName;
-
-								if (string.IsNullOrWhiteSpace(schema))
-									whereClause.Append($"{OB}{tableName}{CB}.{OB}{property.Name}{CB} NOT IN(");
+								if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
+									whereClause.Append($"{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB} NOT IN(");
 								else
-									whereClause.Append($"{OB}{schema}{CB}.{OB}{tableName}{CB}.{OB}{property.Name}{CB} NOT IN(");
+									whereClause.Append($"{OB}{tableAttribute.Schema}{CB}.{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB} NOT IN(");
 
 								for (int i = 1; i < node.Count; i++)
 								{
@@ -1478,13 +1449,10 @@ namespace Tense.Rql.SqlServer
 
 							if (memberAttribute != null)
 							{
-								var schema = string.IsNullOrWhiteSpace(memberAttribute.Schema) ? tableAttribute.Schema : memberAttribute.Schema;
-								var tableName = string.IsNullOrWhiteSpace(memberAttribute.TableName) ? tableAttribute.Name : memberAttribute.TableName;
-
-								if (string.IsNullOrWhiteSpace(schema))
-									whereClause.Append($"{OB}{tableName}{CB}.{OB}{property.Name}{CB} LIKE (");
+								if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
+									whereClause.Append($"{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB} LIKE (");
 								else
-									whereClause.Append($"{OB}{schema}{CB}.{OB}{tableName}{CB}.{OB}{property.Name}{CB} LIKE (");
+									whereClause.Append($"{OB}{tableAttribute.Schema}{CB}.{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB} LIKE (");
 
 								var filter = node.NonNullValue<string>(1);
 								filter = filter.Replace("*", "%").Replace("?", "_");
@@ -1517,13 +1485,10 @@ namespace Tense.Rql.SqlServer
 
 							if (memberAttribute != null)
 							{
-								var schema = string.IsNullOrWhiteSpace(memberAttribute.Schema) ? tableAttribute.Schema : memberAttribute.Schema;
-								var tableName = string.IsNullOrWhiteSpace(memberAttribute.TableName) ? tableAttribute.Name : memberAttribute.TableName;
-
-								if (string.IsNullOrWhiteSpace(schema))
-									whereClause.Append($"{OB}{tableName}{CB}.{OB}{property.Name}{CB} NOT LIKE (");
+								if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
+									whereClause.Append($"{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB} NOT LIKE (");
 								else
-									whereClause.Append($"{OB}{schema}{CB}.{OB}{tableName}{CB}.{OB}{property.Name}{CB} NOT LIKE (");
+									whereClause.Append($"{OB}{tableAttribute.Schema}{CB}.{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB} NOT LIKE (");
 
 								var filter = node.NonNullValue<string>(1);
 								filter = filter.Replace("*", "%").Replace("?", "_");
@@ -1552,7 +1517,7 @@ namespace Tense.Rql.SqlServer
 
 		private string ConstructComparrisonOperator(Type nodeType, string operation, string attributeName, object attributeValue, List<SqlParameter> parameters)
 		{
-			var tableAttribute = nodeType.GetCustomAttribute<Table>(false);
+			var tableAttribute = nodeType.GetCustomAttribute<TableAttribute>(false);
 
 			if (tableAttribute == null)
 				throw new InvalidCastException($"The class {nodeType.Name} is not an entity model.");
@@ -1565,8 +1530,6 @@ namespace Tense.Rql.SqlServer
 
 				if (memberAttribute != null)
 				{
-					var tableName = string.IsNullOrWhiteSpace(memberAttribute.TableName) ? tableAttribute.Name : memberAttribute.TableName;
-					var schema = string.IsNullOrWhiteSpace(memberAttribute.Schema) ? tableAttribute.Schema : memberAttribute.Schema;
 					var columnName = string.IsNullOrWhiteSpace(memberAttribute.ColumnName) ? property.Name : memberAttribute.ColumnName;
 
 					try
@@ -1575,17 +1538,17 @@ namespace Tense.Rql.SqlServer
 						{
 							if (string.Compare(operation, "<>", true) == 0)
 							{
-								if (string.IsNullOrWhiteSpace(schema))
-									return $"{OB}{tableName}{CB}.{OB}{columnName}{CB} is not null";
+								if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
+									return $"{OB}{tableAttribute.Name}{CB}.{OB}{columnName}{CB} is not null";
 								else
-									return $"{OB}{schema}{CB}.{OB}{tableName}{CB}.{OB}{columnName}{CB} is not null";
+									return $"{OB}{tableAttribute.Schema}{CB}.{OB}{tableAttribute.Name}{CB}.{OB}{columnName}{CB} is not null";
 							}
 							else
 							{
-								if (string.IsNullOrWhiteSpace(schema))
-									return $"{OB}{tableName}{CB}.{OB}{property.Name}{CB} is null";
+								if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
+									return $"{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB} is null";
 								else
-									return $"{OB}{schema}{CB}.{OB}{tableName}{CB}.{OB}{property.Name}{CB} is null";
+									return $"{OB}{tableAttribute.Schema}{CB}.{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB} is null";
 							}
 						}
 						else
@@ -1601,10 +1564,10 @@ namespace Tense.Rql.SqlServer
 								parameters.Add(BuildSqlParameter(parameterName, property, attributeValue));
 							}
 
-							if (string.IsNullOrWhiteSpace(schema))
-								return $"{OB}{tableName}{CB}.{OB}{property.Name}{CB} {operation} {parameterName}";
+							if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
+								return $"{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB} {operation} {parameterName}";
 							else
-								return $"{OB}{schema}{CB}.{OB}{tableName}{CB}.{OB}{property.Name}{CB} {operation} {parameterName}";
+								return $"{OB}{tableAttribute.Schema}{CB}.{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB} {operation} {parameterName}";
 						}
 					}
 					catch (FormatException error)
@@ -1635,7 +1598,7 @@ namespace Tense.Rql.SqlServer
 			if (node.Operation == RqlOperation.NOOP)
 				return string.Empty;
 			
-			var tableAttribute = entityType.GetCustomAttribute<Table>(false);
+			var tableAttribute = entityType.GetCustomAttribute<TableAttribute>(false);
 
 			if (tableAttribute == null)
 				throw new InvalidCastException($"The class {entityType.Name} is not an entity model.");
@@ -1691,8 +1654,6 @@ namespace Tense.Rql.SqlServer
 
 								if (memberAttribute != null)
 								{
-									var schema = string.IsNullOrWhiteSpace(memberAttribute.Schema) ? tableAttribute.Schema : memberAttribute.Schema;
-									var tableName = string.IsNullOrWhiteSpace(memberAttribute.TableName) ? tableAttribute.Name : memberAttribute.TableName;
 									var columnName = string.IsNullOrWhiteSpace(memberAttribute.ColumnName) ? property.Name : memberAttribute.ColumnName;
 
 									if (orderByClause.Length > 0)
@@ -1702,10 +1663,10 @@ namespace Tense.Rql.SqlServer
 									{
 										if (string.IsNullOrWhiteSpace(domain))
 										{
-											if (string.IsNullOrWhiteSpace(schema))
-												orderByClause.Append($"{OB}{tableName}{CB}.{OB}{property.Name}{CB} desc");
+											if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
+												orderByClause.Append($"{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB} desc");
 											else
-												orderByClause.Append($"{OB}{schema}{CB}.{OB}{tableName}{CB}.{OB}{property.Name}{CB} desc");
+												orderByClause.Append($"{OB}{tableAttribute.Schema}{CB}.{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB} desc");
 										}
 										else
 										{
@@ -1716,10 +1677,10 @@ namespace Tense.Rql.SqlServer
 									{
 										if (string.IsNullOrWhiteSpace(domain))
 										{
-											if (string.IsNullOrWhiteSpace(schema))
-												orderByClause.Append($"{OB}{tableName}{CB}.{OB}{property.Name}{CB}");
+											if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
+												orderByClause.Append($"{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB}");
 											else
-												orderByClause.Append($"{OB}{schema}{CB}.{OB}{tableName}{CB}.{OB}{property.Name}{CB}");
+												orderByClause.Append($"{OB}{tableAttribute.Schema}{CB}.{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB}");
 										}
 										else
 											orderByClause.Append($"{OB}{domain}{CB}.{OB}{property.Name}{CB}");
@@ -2762,7 +2723,7 @@ namespace Tense.Rql.SqlServer
 		}
 
 
-		internal void BuildSimpleAggregate(Type entityType, RqlNode? node, StringBuilder sql, PropertyInfo[] properties, Table tableAttribute, ref bool first)
+		internal void BuildSimpleAggregate(Type entityType, RqlNode? node, StringBuilder sql, PropertyInfo[] properties, TableAttribute tableAttribute, ref bool first)
 		{
 			if (node is not null)
 			{
@@ -2792,8 +2753,6 @@ namespace Tense.Rql.SqlServer
 
 								if (memberAttribute != null)
 								{
-									var tableName = string.IsNullOrWhiteSpace(memberAttribute.TableName) ? tableAttribute.Name : memberAttribute.TableName;
-									var schema = string.IsNullOrWhiteSpace(memberAttribute.Schema) ? tableAttribute.Schema : memberAttribute.Schema;
 									var columnName = string.IsNullOrWhiteSpace(memberAttribute.ColumnName) ? property.Name : memberAttribute.ColumnName;
 
 									if (first)
@@ -2826,13 +2785,13 @@ namespace Tense.Rql.SqlServer
 											break;
 									}
 
-									if (string.IsNullOrWhiteSpace(schema))
+									if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
 									{
-										sql.Append($"{operation}({OB}{tableName}{CB}.{OB}{columnName}{CB} as decimal)) as {OB}{property.Name}{CB}");
+										sql.Append($"{operation}({OB}{tableAttribute.Name}{CB}.{OB}{columnName}{CB} as decimal)) as {OB}{property.Name}{CB}");
 									}
 									else
 									{
-										sql.Append($"{operation}({OB}{schema}{CB}.{OB}{tableName}{CB}.{OB}{columnName}{CB} as decimal)) as {OB}{property.Name}{CB}");
+										sql.Append($"{operation}({OB}{tableAttribute.Schema}{CB}.{OB}{tableAttribute.Name}{CB}.{OB}{columnName}{CB} as decimal)) as {OB}{property.Name}{CB}");
 									}
 								}
 								else
@@ -2880,7 +2839,7 @@ namespace Tense.Rql.SqlServer
 			return result;
 		}
 
-		private static void AppendFromClause(StringBuilder sql, Table tableAttribute)
+		private static void AppendFromClause(StringBuilder sql, TableAttribute tableAttribute)
 		{
 			sql.AppendLine();
 			if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
@@ -2911,7 +2870,7 @@ namespace Tense.Rql.SqlServer
 			}
 		}
 
-		private static void AppendGroupByClause(StringBuilder sql, RqlNode aggregateNode, Table tableAttribute, PropertyInfo[] properties)
+		private static void AppendGroupByClause(StringBuilder sql, RqlNode aggregateNode, TableAttribute tableAttribute, PropertyInfo[] properties)
 		{
 			bool firstMember = true;
 			sql.Append("GROUP BY ");
@@ -2928,11 +2887,9 @@ namespace Tense.Rql.SqlServer
 			sql.Append(' ');
 		}
 
-		private static void AppendProperty(StringBuilder sql, Table tableAttribute, PropertyInfo property, ref bool firstMember)
+		private static void AppendProperty(StringBuilder sql, TableAttribute tableAttribute, PropertyInfo property, ref bool firstMember)
 		{
 			var memberAttribute = property.GetCustomAttribute<MemberAttribute>();
-			var tableName = string.IsNullOrWhiteSpace(memberAttribute.TableName) ? tableAttribute.Name : memberAttribute.TableName;
-			var schema = string.IsNullOrWhiteSpace(memberAttribute.Schema) ? tableAttribute.Schema : memberAttribute.Schema;
 			var columnName = string.IsNullOrWhiteSpace(memberAttribute.ColumnName) ? property.Name : memberAttribute.ColumnName;
 
 			if (firstMember)
@@ -2940,19 +2897,19 @@ namespace Tense.Rql.SqlServer
 			else
 				sql.Append(", ");
 
-			if (string.IsNullOrWhiteSpace(schema))
+			if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
 			{
 				if (string.Equals(columnName, property.Name, StringComparison.OrdinalIgnoreCase))
-					sql.Append($"[{tableName}].[{columnName}]");
+					sql.Append($"[{tableAttribute.Name}].[{columnName}]");
 				else
-					sql.Append($"[{tableName}].[{columnName}] as [{property.Name}]");
+					sql.Append($"[{tableAttribute.Name}].[{columnName}] as [{property.Name}]");
 			}
 			else
 			{
 				if (string.Equals(columnName, property.Name, StringComparison.OrdinalIgnoreCase))
-					sql.Append($"[{schema}].[{tableName}].[{columnName}]");
+					sql.Append($"[{tableAttribute.Schema}].[{tableAttribute.Name}].[{columnName}]");
 				else
-					sql.Append($"[{schema}].[{tableName}].[{columnName}] as [{property.Name}]");
+					sql.Append($"[{tableAttribute.Schema}].[{tableAttribute.Name}].[{columnName}] as [{property.Name}]");
 			}
 		}
 		private static void AppendPropertyForOrderBy(StringBuilder sql, PropertyInfo property, ref bool firstMember)
@@ -2971,11 +2928,9 @@ namespace Tense.Rql.SqlServer
 				sql.Append($"[{property.Name}]");
 		}
 
-		private static void AppendPropertyForRead(StringBuilder sql, Table tableAttribute, PropertyInfo property, ref bool firstMember, string overrideTable = "")
+		private static void AppendPropertyForRead(StringBuilder sql, TableAttribute tableAttribute, PropertyInfo property, ref bool firstMember, string overrideTable = "")
 		{
 			var memberAttribute = property.GetCustomAttribute<MemberAttribute>();
-			var tableName = string.IsNullOrWhiteSpace(memberAttribute.TableName) ? tableAttribute.Name : memberAttribute.TableName;
-			var schema = string.IsNullOrWhiteSpace(memberAttribute.Schema) ? tableAttribute.Schema : memberAttribute.Schema;
 			var columnName = string.IsNullOrWhiteSpace(memberAttribute.ColumnName) ? property.Name : memberAttribute.ColumnName;
 
 			if (firstMember)
@@ -2985,19 +2940,19 @@ namespace Tense.Rql.SqlServer
 
 			if (string.Equals(memberAttribute.NativeDataType, "hierarchyid", StringComparison.OrdinalIgnoreCase))
 			{
-				if (string.IsNullOrWhiteSpace(schema))
+				if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
 				{
 					if (string.Equals(columnName, property.Name, StringComparison.OrdinalIgnoreCase))
 					{
 						if (string.IsNullOrEmpty(overrideTable))
-							sql.Append($"CAST([{tableName}].[{columnName}] as NVARCHAR({memberAttribute.Length})) as {columnName}");
+							sql.Append($"CAST([{tableAttribute.Name}].[{columnName}] as NVARCHAR({memberAttribute.Length})) as {columnName}");
 						else
 							sql.Append($"CAST([{overrideTable}].[{columnName}] as NVARCHAR({memberAttribute.Length})) as {columnName})");
 					}
 					else
 					{
 						if (string.IsNullOrEmpty(overrideTable))
-							sql.Append($"CAST([{tableName}].[{columnName}] as NVARCHAR({memberAttribute.Length})) as [{property.Name}]");
+							sql.Append($"CAST([{tableAttribute.Name}].[{columnName}] as NVARCHAR({memberAttribute.Length})) as [{property.Name}]");
 						else
 							sql.Append($"[{overrideTable}].[{columnName}] as NVARCHAR({memberAttribute.Length})) as [{property.Name}]");
 					}
@@ -3007,14 +2962,14 @@ namespace Tense.Rql.SqlServer
 					if (string.Equals(columnName, property.Name, StringComparison.OrdinalIgnoreCase))
 					{
 						if (string.IsNullOrEmpty(overrideTable))
-							sql.Append($"CAST([{schema}].[{tableName}].[{columnName}] as NVARCHAR({memberAttribute.Length})) as {columnName}");
+							sql.Append($"CAST([{tableAttribute.Schema}].[{tableAttribute.Name}].[{columnName}] as NVARCHAR({memberAttribute.Length})) as {columnName}");
 						else
 							sql.Append($"CAST([{overrideTable}].[{columnName}] as NVARCHAR({memberAttribute.Length})) as {columnName}");
 					}
 					else
 					{
 						if (string.IsNullOrEmpty(overrideTable))
-							sql.Append($"[{schema}].[{tableName}].[{columnName}] as NVARCHAR({memberAttribute.Length})) as {property.Name}");
+							sql.Append($"[{tableAttribute.Schema}].[{tableAttribute.Name}].[{columnName}] as NVARCHAR({memberAttribute.Length})) as {property.Name}");
 						else
 							sql.Append($"[{overrideTable}].[{columnName}] as NVARCHAR({memberAttribute.Length})) as {property.Name}");
 					}
@@ -3022,19 +2977,19 @@ namespace Tense.Rql.SqlServer
 			}
 			else
 			{
-				if (string.IsNullOrWhiteSpace(schema))
+				if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
 				{
 					if (string.Equals(columnName, property.Name, StringComparison.OrdinalIgnoreCase))
 					{
 						if (string.IsNullOrEmpty(overrideTable))
-							sql.Append($"[{tableName}].[{columnName}]");
+							sql.Append($"[{tableAttribute.Name}].[{columnName}]");
 						else
 							sql.Append($"[{overrideTable}].[{columnName}]");
 					}
 					else
 					{
 						if (string.IsNullOrEmpty(overrideTable))
-							sql.Append($"[{tableName}].[{columnName}] as [{property.Name}]");
+							sql.Append($"[{tableAttribute.Name}].[{columnName}] as [{property.Name}]");
 						else
 							sql.Append($"[{overrideTable}].[{columnName}] as [{property.Name}]");
 					}
@@ -3044,14 +2999,14 @@ namespace Tense.Rql.SqlServer
 					if (string.Equals(columnName, property.Name, StringComparison.OrdinalIgnoreCase))
 					{
 						if (string.IsNullOrEmpty(overrideTable))
-							sql.Append($"[{schema}].[{tableName}].[{columnName}]");
+							sql.Append($"[{tableAttribute.Schema}].[{tableAttribute.Name}].[{columnName}]");
 						else
 							sql.Append($"[{overrideTable}].[{columnName}]");
 					}
 					else
 					{
 						if (string.IsNullOrEmpty(overrideTable))
-							sql.Append($"[{schema}].[{tableName}].[{property.Name}]");
+							sql.Append($"[{tableAttribute.Schema}].[{tableAttribute.Name}].[{property.Name}]");
 						else
 							sql.Append($"[{overrideTable}].[{property.Name}]");
 					}
