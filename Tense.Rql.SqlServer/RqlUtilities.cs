@@ -8,7 +8,6 @@ namespace Tense.Rql.SqlServer
 {
 	internal static class RqlUtilities
 	{
-				   node.Find(RqlOperation.MEAN) != null ||
 		/// <summary>
 		/// Extracts the list of properties used by any aggregate functions
 		/// </summary>
