@@ -8,40 +8,7 @@ namespace Tense.Rql.SqlServer
 {
 	internal static class RqlUtilities
 	{
-		internal static RqlNode? ExtractSelectClause(this RqlNode node)
-		{
-			RqlNode? selectNode = null;
-
-			if (node.Contains(RqlOperation.VALUES))
-			{
-				selectNode = node.ExtractValueField();
-			}
-			else if (selectNode == null && node.HasAggregates())
-			{
-				selectNode = node.ExtractAggregateFields();
-			}
-			else
-			{
-				selectNode = node.Find(RqlOperation.SELECT);
-			}
-
-			return selectNode;
-		}
-
-		/// <summary>
-		/// Used to determine of the <see cref="RqlNode"/> contains aggregate functions
-		/// </summary>
-		/// <returns><see langword="true"/> if the <see cref="RqlNode"/> contains aggregate functions; <see langword="false"/> otherwise.</returns>
-		internal static bool HasAggregates(this RqlNode node)
-		{
-			return node.Find(RqlOperation.MAX) != null ||
-				   node.Find(RqlOperation.MIN) != null ||
-				   node.Find(RqlOperation.MAX) != null ||
-				   node.Find(RqlOperation.SUM) != null ||
 				   node.Find(RqlOperation.MEAN) != null ||
-				   node.Find(RqlOperation.AGGREGATE) != null;
-		}
-
 		/// <summary>
 		/// Extracts the list of properties used by any aggregate functions
 		/// </summary>
