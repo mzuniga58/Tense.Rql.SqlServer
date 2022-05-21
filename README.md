@@ -1,5 +1,5 @@
 # Tense.Rql.SqlServer #
-Adds SQL Sever support for RQL. The **Tense.Rql.SqlServer* library is responsible for translating an RQL Statement into its equivalent SQL Statement for SQL Server. The main class that accomplishes this feature is the RqlSqlGenerator.
+Adds SQL Sever support for RQL. The **Tense.Rql.SqlServer** library is responsible for translating an RQL Statement into its equivalent SQL Statement for SQL Server. The main class that accomplishes this feature is the **RqlSqlGenerator**.
 
 ## RqlSqlGenerator ##
 **RqlSqlGenerator**(int *batchlimit*)
