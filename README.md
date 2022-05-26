@@ -18,3 +18,22 @@ The **GenerateSelectSingle** produces a SQL Statement that returns a entity reso
 
 **Returns**
 The SQL Statement needed to obtain the entity.
+
+<h2>Change History</h2>
+<table>
+    <tr>
+        <th>Date</th>
+        <th>Description</th>
+        <th>Version</th>
+    </tr>
+    <tr>
+        <td>05/23/2022</td>
+        <td>Fixed DateTime parsing bugs.</td>
+        <td>0.0.8-alpha</td>
+    </tr>  
+    <tr>
+        <td>05/26/2022</td>
+        <td>Fixed Numeric parsing bugs.</td>
+        <td>0.0.10-alpha</td>
+    </tr>
+</table>
