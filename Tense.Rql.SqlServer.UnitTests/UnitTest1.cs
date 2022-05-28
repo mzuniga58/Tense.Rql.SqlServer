@@ -64,5 +64,21 @@ namespace Tense.Rql.SqlServer.UnitTests
                 Assert.Fail(error.Message);
             }
         }
+
+        [TestMethod]
+        public void TestMethod6()
+        {
+            try
+            {
+                var node = RqlNode.Parse("values(Category)");
+                var generator = new RqlSqlGenerator(100);
+
+                var sqlStatement = generator.GenerateResourceCollectionStatement<ECustomer>(node, out List<SqlParameter> parameters, true);
+            }
+            catch (Exception error)
+            {
+                Assert.Fail(error.Message);
+            }
+        }
     }
 }

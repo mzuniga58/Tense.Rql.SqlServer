@@ -770,7 +770,7 @@ namespace Tense.Rql.SqlServer
 			{
 				if (NoPaging && pageFilter == null)
 				{
-					sql.Append("select distinct ");
+					sql.Append("SELECT DISTINCT ");
 					bool firstMember = true;
 
 					var propertyNode = valuesNode.NonNullValue<RqlNode>(0);
@@ -779,53 +779,60 @@ namespace Tense.Rql.SqlServer
 
 					AppendFromClause(sql, tableAttribute);
 					AppendWhereClause(sql, whereClause);
+
+					if (string.IsNullOrWhiteSpace(orderByClause))
+					{
+						var memberAttribute = property.GetCustomAttribute<MemberAttribute>();
+
+						if (memberAttribute != null)
+						{
+							var columnName = string.IsNullOrWhiteSpace(memberAttribute.ColumnName) ? property.Name : memberAttribute.ColumnName;
+
+							if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
+							{
+								orderByClause = $"[{tableAttribute.Name}].[{columnName}]";
+							}
+							else
+							{
+								orderByClause = $"[{tableAttribute.Schema}].[{tableAttribute.Name}].[{columnName}]";
+							}
+						}
+					}
+
 					AppendOrderByClause(sql, orderByClause);
 				}
 				else
 				{
-					sql.Append("SELECT ");
-
-					PropertyInfo property;
-
-					var childNode = valuesNode.NonNullValue<RqlNode>(0);
-
-					if (childNode.Operation == RqlOperation.PROPERTY)
-					{
-						property = properties.FirstOrDefault(p => string.Equals(childNode.Value<string>(0), p.Name, StringComparison.OrdinalIgnoreCase));
-					}
-					else
-					{
-						var propertyNode = childNode.NonNullValue<RqlNode>(0);
-						property = properties.FirstOrDefault(p => string.Equals(propertyNode.Value<string>(0), p.Name, StringComparison.OrdinalIgnoreCase));
-					}
-
-					sql.Append($"[t0].[{property.Name}]");
-
-					sql.AppendLine();
-					sql.AppendLine("  FROM (");
-					sql.AppendLine("         SELECT ROW_NUMBER() OVER ( ORDER BY ");
-
-					if (string.IsNullOrWhiteSpace(orderByClause))
-					{
-						var firstField = true;
-						if (RqlUtilities.CheckForInclusion(property, selectFields, false))
-						{
-							AppendPropertyForRead(sql, tableAttribute, property, ref firstField, "T1");
-						}
-					}
-					else
-					{
-						sql.Append(orderByClause);
-					}
-
-					sql.AppendLine(") as [ROW_NUMBER],");
-
+					sql.Append("SELECT DISTINCT ");
 					bool firstMember = true;
-					property = properties.FirstOrDefault(p => string.Equals(childNode.Value<string>(0), p.Name, StringComparison.OrdinalIgnoreCase));
+
+					var propertyNode = valuesNode.NonNullValue<RqlNode>(0);
+					var property = properties.FirstOrDefault(p => string.Equals(propertyNode.Value<string>(0), p.Name, StringComparison.OrdinalIgnoreCase));
 					AppendProperty(sql, tableAttribute, property, ref firstMember);
 
 					AppendFromClause(sql, tableAttribute);
 					AppendWhereClause(sql, whereClause);
+
+					if ( string.IsNullOrWhiteSpace(orderByClause))
+                    {
+						var memberAttribute = property.GetCustomAttribute<MemberAttribute>();
+
+						if (memberAttribute != null)
+						{
+							var columnName = string.IsNullOrWhiteSpace(memberAttribute.ColumnName) ? property.Name : memberAttribute.ColumnName;
+
+							if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
+							{
+								orderByClause = $"[{tableAttribute.Name}].[{columnName}]";
+							}
+							else
+							{
+								orderByClause = $"[{tableAttribute.Schema}].[{tableAttribute.Name}].[{columnName}]";
+							}
+						}
+                    }
+
+					AppendOrderByClause(sql, orderByClause);
 
 					int start = 1;
 					int count = _batchLimit;
@@ -839,9 +846,7 @@ namespace Tense.Rql.SqlServer
 					if (count > _batchLimit)
 						count = _batchLimit;
 
-					sql.AppendLine($") as [t0]");
-					sql.AppendLine($" WHERE [t0].[ROW_NUMBER] BETWEEN {start} AND {start + count - 1}");
-					sql.AppendLine($" ORDER BY [t0].[ROW_NUMBER]");
+					sql.AppendLine($" OFFSET {start - 1} ROWS FETCH NEXT {count} ROWS ONLY");
 				}
 			}
 
