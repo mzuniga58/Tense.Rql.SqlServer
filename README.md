@@ -36,4 +36,9 @@ The SQL Statement needed to obtain the entity.
         <td>Fixed Numeric parsing bugs.</td>
         <td>0.0.10-alpha</td>
     </tr>
+    <tr>
+        <td>05/28/2022</td>
+        <td>Fixed aggregate paging.</td>
+        <td>0.0.11-alpha</td>
+    </tr>
 </table>
