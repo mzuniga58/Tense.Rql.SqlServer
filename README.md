@@ -41,4 +41,9 @@ The SQL Statement needed to obtain the entity.
         <td>Fixed aggregate paging.</td>
         <td>0.0.11-alpha</td>
     </tr>
+    <tr>
+        <td>05/28/2022</td>
+        <td>Fixed collection paging.</td>
+        <td>0.0.12-alpha</td>
+    </tr>
 </table>

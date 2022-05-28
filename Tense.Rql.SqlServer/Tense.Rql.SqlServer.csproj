@@ -10,7 +10,7 @@
 	  <Description>A library to add RQL support to RESTful Web Services using SQL Server</Description>
 	  <PackageLicenseExpression>MIT</PackageLicenseExpression>
 	  <RepositoryUrl>https://github.com/mzuniga58/Tense.Rql.SqlServer</RepositoryUrl>
-	  <Version>0.0.11-alpha</Version>
+	  <Version>0.0.12-alpha</Version>
 	  <PackageReleaseNotes>Pre-release. DO NOT USE.</PackageReleaseNotes>
 	  <PackageId>Tense.Rql.SqlServer</PackageId>
 	  <GeneratePackageOnBuild>true</GeneratePackageOnBuild>

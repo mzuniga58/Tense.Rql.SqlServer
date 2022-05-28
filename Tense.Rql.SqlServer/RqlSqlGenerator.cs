@@ -605,6 +605,8 @@ namespace Tense.Rql.SqlServer
 			}
 
 			AppendFromClause(sql, tableAttribute);
+			AppendWhereClause(sql, whereClause);
+			sql.AppendLine();
 
 			firstField = true;
 
@@ -617,8 +619,6 @@ namespace Tense.Rql.SqlServer
 			}
 
 			AppendOrderByClause(sql, orderByClause);
-
-			AppendWhereClause(sql, whereClause);
 
 			int start = 1;
 

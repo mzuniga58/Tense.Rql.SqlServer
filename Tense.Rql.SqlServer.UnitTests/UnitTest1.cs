@@ -80,5 +80,21 @@ namespace Tense.Rql.SqlServer.UnitTests
                 Assert.Fail(error.Message);
             }
         }
+
+        [TestMethod]
+        public void TestMethod7()
+        {
+            try
+            {
+                var node = RqlNode.Parse("AuthorId=8&sort(AuthorId,BookId)");
+                var generator = new RqlSqlGenerator(100);
+
+                var sqlStatement = generator.GenerateResourceCollectionStatement<EBooksByAuthor>(node, out List<SqlParameter> parameters);
+            }
+            catch (Exception error)
+            {
+                Assert.Fail(error.Message);
+            }
+        }
     }
 }
