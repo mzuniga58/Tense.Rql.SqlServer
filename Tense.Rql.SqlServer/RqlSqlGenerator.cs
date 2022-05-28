@@ -260,10 +260,8 @@ namespace Tense.Rql.SqlServer
 
 				if (node.Contains(RqlOperation.AGGREGATE))
 					return BuildAggregateNonPagedCollection(entityType, node, parameters);
-				else if (node.Contains(RqlOperation.DISTINCT))
-					return BuildDistinctNonPagedCollection(entityType, node, parameters);
-				else
-					return BuidStandardNonPagedCollection(entityType, node, parameters);
+				else 
+					return BuildStandardNonPagedCollection(entityType, node, parameters);
 			}
 			else
 			{
@@ -271,9 +269,7 @@ namespace Tense.Rql.SqlServer
 
 				if (node.Contains(RqlOperation.AGGREGATE))
 					return BuildAggregatePagedCollection(entityType, node, pageFilter, parameters);
-				else if (node.Contains(RqlOperation.DISTINCT))
-					return BuildDistinctPagedCollection(entityType, node, pageFilter, parameters);
-				else
+				else 
 					return BuildStandardPagedCollection(entityType, node, parameters);
 			}
 		}
@@ -597,42 +593,6 @@ namespace Tense.Rql.SqlServer
 
 			foreach (var property in properties)
 			{
-				if (RqlUtilities.CheckForInclusion(property, selectFields))
-				{
-					AppendPropertyForRead(sql, tableAttribute, property, ref firstField, "T0");
-				}
-			}
-
-			sql.AppendLine();
-			sql.AppendLine(" FROM (");
-			sql.AppendLine(" SELECT ROW_NUMBER() OVER ( ORDER BY ");
-
-			if (string.IsNullOrWhiteSpace(orderByClause))
-			{
-				firstField = true;
-				foreach (var property in properties)
-				{
-					var memberAttribute = property.GetCustomAttribute<MemberAttribute>();
-
-					if (memberAttribute != null)
-					{
-						if (memberAttribute.IsPrimaryKey)
-						{
-							AppendPropertyForOrderBy(sql, property, ref firstField);
-						}
-					}
-				}
-			}
-			else
-			{
-				sql.Append(orderByClause);
-			}
-
-			sql.AppendLine(") as [ROW_NUMBER],");
-			firstField = true;
-
-			foreach (var property in properties)
-			{
 				var memberAttribute = property.GetCustomAttribute<MemberAttribute>();
 
 				if (memberAttribute != null)
@@ -644,10 +604,19 @@ namespace Tense.Rql.SqlServer
 				}
 			}
 
-			if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
-				sql.Append($"\r\n           FROM [{tableAttribute.Name}] WITH(NOLOCK)");
-			else
-				sql.Append($"\r\n           FROM [{tableAttribute.Schema}].[{tableAttribute.Name}] WITH(NOLOCK) ");
+			AppendFromClause(sql, tableAttribute);
+
+			firstField = true;
+
+			if ( string.IsNullOrWhiteSpace(orderByClause))
+            {
+				orderByClause = GenerateOrderByKeysClause(entityType);
+
+				if (string.IsNullOrEmpty(orderByClause))
+					orderByClause = GenerateOrderByColumnsClause(entityType);
+			}
+
+			AppendOrderByClause(sql, orderByClause);
 
 			AppendWhereClause(sql, whereClause);
 
@@ -666,14 +635,60 @@ namespace Tense.Rql.SqlServer
 			if (count > _batchLimit)
 				count = _batchLimit;
 
-			sql.AppendLine($") as [t0]");
-			sql.AppendLine($" WHERE [t0].[ROW_NUMBER] BETWEEN {start} AND {start + count - 1}");
-			sql.AppendLine($" ORDER BY [t0].[ROW_NUMBER]");
+			sql.AppendLine($" OFFSET {start - 1} ROWS FETCH NEXT {count} ROWS ONLY");
+			return sql.ToString();
+		}
+
+		private string GenerateOrderByKeysClause(Type entityType)
+		{
+			var properties = entityType.GetProperties();
+			var sql = new StringBuilder();
+			var firstColumn = true;
+
+			foreach (var property in properties)
+			{
+				var memberAttribute = property.GetCustomAttribute<MemberAttribute>();
+
+				if (memberAttribute != null)
+				{
+					if (memberAttribute.IsPrimaryKey)
+					{
+						if (firstColumn)
+							firstColumn = false;
+						else
+							sql.Append(", ");
+						sql.Append(property.Name);
+					}
+				}
+			}
 
 			return sql.ToString();
 		}
 
-		private string BuidStandardNonPagedCollection(Type entityType, RqlNode node, List<SqlParameter> parameters)
+		private string GenerateOrderByColumnsClause(Type entityType)
+		{
+			var properties = entityType.GetProperties();
+			var sql = new StringBuilder();
+			var firstColumn = true;
+
+			foreach (var property in properties)
+			{
+				var memberAttribute = property.GetCustomAttribute<MemberAttribute>();
+
+				if (memberAttribute != null)
+				{
+					if (firstColumn)
+						firstColumn = false;
+					else
+						sql.Append(", ");
+					sql.Append(property.Name);
+				}
+			}
+
+			return sql.ToString();
+		}
+
+		private string BuildStandardNonPagedCollection(Type entityType, RqlNode node, List<SqlParameter> parameters)
 		{
 			var tableAttribute = entityType.GetCustomAttribute<TableAttribute>(false);
 
@@ -686,176 +701,48 @@ namespace Tense.Rql.SqlServer
 			var whereClause = ParseWhereClause(entityType, node, null, tableAttribute, properties, parameters);
 			var selectFields = node?.Find(RqlOperation.SELECT);
 
+			bool firstField = true;
+
 			sql.Append("SELECT ");
+
+			if (node?.Find(RqlOperation.DISTINCT) != null)
+			{
+				sql.Append("DISTINCT ");
+			}
 
 			if (node?.Find(RqlOperation.FIRST) != null)
 			{
 				sql.Append("TOP 1 ");
 			}
 
-			bool firstField = true;
 			foreach (var property in properties)
 			{
-				if (RqlUtilities.CheckForInclusion(property, selectFields))
+				var memberAttribute = property.GetCustomAttribute<MemberAttribute>();
+
+				if (memberAttribute != null)
 				{
-					AppendPropertyForRead(sql, tableAttribute, property, ref firstField);
-				}
-			}
-
-			AppendFromClause(sql, tableAttribute);
-			AppendWhereClause(sql, whereClause);
-			AppendOrderByClause(sql, orderByClause);
-
-			return sql.ToString();
-		}
-
-		private string BuildDistinctPagedCollection(Type entityType, RqlNode node, RqlNode? pageFilter, List<SqlParameter> parameters)
-		{
-			var tableAttribute = entityType.GetCustomAttribute<TableAttribute>(false);
-
-			if (tableAttribute == null)
-				throw new InvalidCastException($"The class {entityType.Name} is not an entity model.");
-
-			var properties = entityType.GetProperties();
-			var sql = new StringBuilder();
-			var whereClause = ParseWhereClause(entityType, node, null, tableAttribute, properties, parameters);
-			var selectFields = node.Find(RqlOperation.SELECT);
-
-			bool firstField = true;
-
-			sql.Append("SELECT ");
-
-			if (node.Find(RqlOperation.FIRST) != null)
-			{
-				sql.Append("TOP 1 ");
-			}
-
-			foreach (var property in properties)
-			{
-				if (RqlUtilities.CheckForInclusion(property, selectFields, false))
-				{
-					AppendPropertyForRead(sql, tableAttribute, property, ref firstField, "T0");
-				}
-			}
-
-			var orderByClause = ParseOrderByClause(entityType, node, "T1");
-
-			sql.AppendLine();
-			sql.Append(" FROM ( SELECT ROW_NUMBER() OVER ( ORDER BY ");
-
-			if (string.IsNullOrWhiteSpace(orderByClause))
-			{
-				firstField = true;
-				foreach (var property in properties)
-				{
-					if (RqlUtilities.CheckForInclusion(property, selectFields, false))
+					if (RqlUtilities.CheckForInclusion(property, selectFields))
 					{
-						AppendPropertyForRead(sql, tableAttribute, property, ref firstField, "T1");
+						AppendPropertyForRead(sql, tableAttribute, property, ref firstField);
 					}
 				}
 			}
-			else
-			{
-				sql.Append(orderByClause);
-			}
-
-			sql.AppendLine(") as [ROW_NUMBER],");
-			firstField = true;
-
-			foreach (var property in properties)
-			{
-				if (RqlUtilities.CheckForInclusion(property, selectFields, false))
-				{
-					AppendPropertyForRead(sql, tableAttribute, property, ref firstField, "T1");
-				}
-			}
-
-			sql.Append(" FROM ( SELECT DISTINCT ");
-			firstField = true;
-
-			foreach (var property in properties)
-			{
-				if (RqlUtilities.CheckForInclusion(property, selectFields, false))
-				{
-					AppendPropertyForRead(sql, tableAttribute, property, ref firstField);
-				}
-			}
-
-			if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
-				sql.Append($" FROM [{tableAttribute.Name}] WITH(NOLOCK)");
-			else
-				sql.Append($" FROM [{tableAttribute.Schema}].[{tableAttribute.Name}] WITH(NOLOCK) ");
-
-			AppendWhereClause(sql, whereClause);
-
-			sql.Append(") as [T1]");
-
-			int start = 1;
-			int count = _batchLimit;
-
-			if (pageFilter != null)
-			{
-				start = pageFilter.NonNullValue<int>(0);
-				count = pageFilter.NonNullValue<int>(1);
-			}
-
-			if (count > _batchLimit)
-				count = _batchLimit;
-
-			sql.AppendLine($") as [T0]");
-			sql.AppendLine($" WHERE [T0].[ROW_NUMBER] BETWEEN {start} AND {start + count - 1}");
-			sql.AppendLine($" ORDER BY [T0].[ROW_NUMBER]");
-
-			return sql.ToString();
-		}
-
-		private string BuildDistinctNonPagedCollection(Type entityType, RqlNode node, List<SqlParameter> parameters)
-		{
-			var tableAttribute = entityType.GetCustomAttribute<TableAttribute>(false);
-
-			if (tableAttribute == null)
-				throw new InvalidCastException($"The class {entityType.Name} is not an entity model.");
-
-			var properties = entityType.GetProperties();
-			var sql = new StringBuilder();
-			var whereClause = ParseWhereClause(entityType, node, null, tableAttribute, properties, parameters);
-			var selectFields = node.Find(RqlOperation.SELECT);
-
-			var orderByClause = ParseOrderByClause(entityType, node);
-			bool firstField = true;
-
-			sql.Append("SELECT ");
-
-			if (node?.Find(RqlOperation.FIRST) != null)
-			{
-				sql.Append("TOP 1 ");
-			}
-
-			foreach (var property in properties)
-			{
-				if (RqlUtilities.CheckForInclusion(property, selectFields, false))
-				{
-					AppendPropertyForRead(sql, tableAttribute, property, ref firstField, "T0");
-				}
-			}
-
-			sql.Append(" FROM (SELECT DISTINCT ");
-			firstField = true;
-
-			foreach (var property in properties)
-			{
-				if (RqlUtilities.CheckForInclusion(property, selectFields, false))
-				{
-					AppendPropertyForRead(sql, tableAttribute, property, ref firstField);
-				}
-			}
 
 			AppendFromClause(sql, tableAttribute);
-			AppendWhereClause(sql, whereClause);
+
+			firstField = true;
+
+			if (string.IsNullOrWhiteSpace(orderByClause))
+			{
+				orderByClause = GenerateOrderByKeysClause(entityType);
+
+				if (string.IsNullOrEmpty(orderByClause))
+					orderByClause = GenerateOrderByColumnsClause(entityType);
+			}
+
 			AppendOrderByClause(sql, orderByClause);
 
-			sql.Append(") AS T0");
-
+			AppendWhereClause(sql, whereClause);
 			return sql.ToString();
 		}
 
@@ -1023,101 +910,32 @@ namespace Tense.Rql.SqlServer
 					{
 						property = properties.FirstOrDefault(p => string.Equals(childNode.Value<string>(0), p.Name, StringComparison.OrdinalIgnoreCase));
 						memberAttribute = property.GetCustomAttribute<MemberAttribute>();
-					}
-					else
-					{
-						var propertyNode = childNode.NonNullValue<RqlNode>(0);
-						property = properties.FirstOrDefault(p => string.Equals(propertyNode.Value<string>(0), p.Name, StringComparison.OrdinalIgnoreCase));
-						memberAttribute = property.GetCustomAttribute<MemberAttribute>();
-					}
 
-					if (memberAttribute != null)
-					{
-						if (firstMember)
-							firstMember = false;
-						else
-							sql.Append(", ");
-
-						sql.Append($"[t0].[{property.Name}]");
-					}
-				}
-
-				sql.AppendLine();
-				sql.AppendLine("  FROM (");
-				sql.AppendLine("         SELECT ROW_NUMBER() OVER (");
-
-				if (string.IsNullOrWhiteSpace(orderByClause))
-				{
-					var primaryKeyProperties = properties.Where(x => x.GetCustomAttribute<MemberAttribute>() != null && x.GetCustomAttribute<MemberAttribute>().IsPrimaryKey);
-
-					if (primaryKeyProperties.Count() > 1)
-					{
-						sql.Append(" ORDER BY ");
-
-						bool firstComponent = true;
-						foreach (var composite in primaryKeyProperties)
+						if (memberAttribute != null)
 						{
-							var tableName = tableAttribute.Name;
-							var schema = tableAttribute.Schema;
-							var memberAttribute = composite.GetCustomAttribute<MemberAttribute>();
+							var columnName = string.IsNullOrWhiteSpace(memberAttribute.ColumnName) ? property.Name : memberAttribute.ColumnName;
 
-							if (memberAttribute != null)
+							if (firstMember)
+								firstMember = false;
+							else
+								sql.Append(", ");
+
+							if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
 							{
-								var columnName = string.IsNullOrWhiteSpace(memberAttribute.ColumnName) ? composite.Name : memberAttribute.ColumnName;
-
-								if (firstComponent)
-								{
-									if (string.IsNullOrWhiteSpace(schema))
-										sql.Append($"MAX([{tableName}].[{columnName}])");
-									else
-										sql.Append($"MAX([{schema}].[{tableName}].[{columnName}])");
-									firstComponent = false;
-								}
-								else
-								{
-									if (string.IsNullOrWhiteSpace(schema))
-										sql.Append($", MAX([{tableName}].[{columnName}])");
-									else
-										sql.Append($", MAX([{schema}].[{tableName}].[{columnName}])");
-								}
+								sql.Append($"[{tableAttribute.Name}].[{columnName}]");
+							}
+							else
+							{
+								sql.Append($"[{tableAttribute.Schema}].[{tableAttribute.Name}].[{columnName}]");
 							}
 						}
 					}
-					else if (primaryKeyProperties.Any())
-					{
-						var primaryKeyProperty = properties.FirstOrDefault(x => x.GetCustomAttribute<MemberAttribute>() != null && x.GetCustomAttribute<MemberAttribute>().IsPrimaryKey);
-
-						if (primaryKeyProperty != null)
-						{
-							var columnName = string.IsNullOrWhiteSpace(primaryKeyProperty.GetCustomAttribute<MemberAttribute>().ColumnName) ? primaryKeyProperty.Name : primaryKeyProperty.GetCustomAttribute<MemberAttribute>().ColumnName;
-
-							if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
-								sql.Append($" ORDER BY MAX([{tableAttribute.Name}].[{columnName}]) asc ");
-							else
-								sql.Append($" ORDER BY MAX([{tableAttribute.Schema}].[{tableAttribute.Name}].[{columnName}]) asc ");
-						}
-					}
-				}
-				else
-				{
-					sql.Append(" ORDER BY ");
-					sql.Append(orderByClause);
-				}
-
-				sql.AppendLine(") as [ROW_NUMBER],");
-				firstMember = true;
-
-				foreach (RqlNode childNode in aggregateNode)
-				{
-					if (childNode.Operation == RqlOperation.PROPERTY)
-					{
-						var property = properties.FirstOrDefault(p => string.Equals(childNode.Value<string>(0), p.Name, StringComparison.OrdinalIgnoreCase));
-						AppendProperty(sql, tableAttribute, property, ref firstMember);
-					}
 					else
 					{
+						var operationNode = childNode;
 						var operation = string.Empty;
-						switch (childNode.Operation)
+
+						switch (operationNode.Operation)
 						{
 							case RqlOperation.MAX:
 								operation = "max";
@@ -1144,9 +962,9 @@ namespace Tense.Rql.SqlServer
 						else
 							sql.Append(", ");
 
-						var propertyNode = (RqlNode)childNode[0];
-						var property = properties.FirstOrDefault(p => string.Equals(propertyNode.Value<string>(0), p.Name, StringComparison.OrdinalIgnoreCase));
-						var memberAttribute = property.GetCustomAttribute<MemberAttribute>();
+						var propertyNode = (RqlNode)operationNode[0];
+						property = properties.FirstOrDefault(p => string.Equals(propertyNode.Value<string>(0), p.Name, StringComparison.OrdinalIgnoreCase));
+						memberAttribute = property.GetCustomAttribute<MemberAttribute>();
 
 						if (memberAttribute != null)
 						{
@@ -1154,11 +972,11 @@ namespace Tense.Rql.SqlServer
 
 							if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
 							{
-								sql.Append($"{operation}([{tableAttribute.Name}].[{columnName}]) as {propertyNode.Value<string>(0)}");
+								sql.Append($"{operation}([{tableAttribute.Name}].[{columnName}]) as [{propertyNode.Value<string>(0)}]");
 							}
 							else
 							{
-								sql.Append($"{operation}([{tableAttribute.Schema}].[{tableAttribute.Name}].[{columnName}]) as {propertyNode.Value<string>(0)}");
+								sql.Append($"{operation}([{tableAttribute.Schema}].[{tableAttribute.Name}].[{columnName}]) as [{propertyNode.Value<string>(0)}]");
 							}
 						}
 					}
@@ -1167,6 +985,44 @@ namespace Tense.Rql.SqlServer
 				AppendFromClause(sql, tableAttribute);
 				AppendWhereClause(sql, whereClause);
 				AppendGroupByClause(sql, aggregateNode, tableAttribute, properties);
+				sql.AppendLine();
+
+				if (string.IsNullOrWhiteSpace(orderByClause))
+				{
+					sql.Append(" ORDER BY ");
+					firstMember = true;
+
+					foreach (RqlNode childNode in aggregateNode)
+					{
+						PropertyInfo property;
+						MemberAttribute memberAttribute;
+
+						if (childNode.Operation == RqlOperation.PROPERTY)
+						{
+							property = properties.FirstOrDefault(p => string.Equals(childNode.Value<string>(0), p.Name, StringComparison.OrdinalIgnoreCase));
+							memberAttribute = property.GetCustomAttribute<MemberAttribute>();
+
+							if (memberAttribute != null)
+							{
+								var columnName = string.IsNullOrWhiteSpace(memberAttribute.ColumnName) ? property.Name : memberAttribute.ColumnName;
+
+								if (firstMember)
+									firstMember = false;
+								else
+									sql.Append(", ");
+
+								if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
+								{
+									sql.Append($"[{tableAttribute.Name}].[{columnName}]");
+								}
+								else
+								{
+									sql.Append($"[{tableAttribute.Schema}].[{tableAttribute.Name}].[{columnName}]");
+								}
+							}
+						}
+					}
+				}
 
 				int start = 1;
 				int count = _batchLimit;
@@ -1180,9 +1036,8 @@ namespace Tense.Rql.SqlServer
 				if (count > _batchLimit)
 					count = _batchLimit;
 
-				sql.AppendLine($") as [t0]");
-				sql.AppendLine($" WHERE [t0].[ROW_NUMBER] BETWEEN {start} AND {start + count - 1}");
-				sql.AppendLine($" ORDER BY [t0].[ROW_NUMBER]");
+				sql.AppendLine();
+				sql.AppendLine($" OFFSET {start - 1} ROWS FETCH NEXT {count} ROWS ONLY");
 			}
 
 			return sql.ToString();
@@ -1241,11 +1096,11 @@ namespace Tense.Rql.SqlServer
 
 							if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
 							{
-								sql.Append($"{operation}([{tableAttribute.Name}].[{columnName}]) as {property.Name}");
+								sql.Append($"{operation}([{tableAttribute.Name}].[{columnName}]) as [{property.Name}]");
 							}
 							else
 							{
-								sql.Append($"{operation}([{tableAttribute.Schema}].[{tableAttribute.Name}].[{columnName}]) as {property.Name}");
+								sql.Append($"{operation}([{tableAttribute.Schema}].[{tableAttribute.Name}].[{columnName}]) as [{property.Name}]");
 							}
 						}
 					}
@@ -2765,33 +2620,33 @@ namespace Tense.Rql.SqlServer
 									switch (node.Operation)
 									{
 										case RqlOperation.MAX:
-											operation = "max(cast";
+											operation = "max";
 											break;
 
 										case RqlOperation.MIN:
-											operation = "min(cast";
+											operation = "min";
 											break;
 
 										case RqlOperation.MEAN:
-											operation = "avg(cast";
+											operation = "avg";
 											break;
 
 										case RqlOperation.SUM:
-											operation = "sum(cast";
+											operation = "sum";
 											break;
 
 										case RqlOperation.COUNT:
-											operation = "count(cast";
+											operation = "count";
 											break;
 									}
 
 									if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
 									{
-										sql.Append($"{operation}({OB}{tableAttribute.Name}{CB}.{OB}{columnName}{CB} as decimal)) as {OB}{property.Name}{CB}");
+										sql.Append($"{operation}({OB}{tableAttribute.Name}{CB}.{OB}{columnName}{CB}) as {OB}{property.Name}{CB}");
 									}
 									else
 									{
-										sql.Append($"{operation}({OB}{tableAttribute.Schema}{CB}.{OB}{tableAttribute.Name}{CB}.{OB}{columnName}{CB} as decimal)) as {OB}{property.Name}{CB}");
+										sql.Append($"{operation}({OB}{tableAttribute.Schema}{CB}.{OB}{tableAttribute.Name}{CB}.{OB}{columnName}{CB}) as {OB}{property.Name}{CB}");
 									}
 								}
 								else
@@ -2854,9 +2709,7 @@ namespace Tense.Rql.SqlServer
 		{
 			if (!string.IsNullOrWhiteSpace(orderByClause))
 			{
-				sql.Append("\r\n ORDER BY ");
-				sql.Append(orderByClause);
-				sql.Append(' ');
+				sql.AppendLine($" ORDER BY {orderByClause}");
 			}
 		}
 
