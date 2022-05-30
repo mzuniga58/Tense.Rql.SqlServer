@@ -46,4 +46,9 @@ The SQL Statement needed to obtain the entity.
         <td>Fixed collection paging.</td>
         <td>0.0.12-alpha</td>
     </tr>
+    <tr>
+        <td>05/29/2022</td>
+        <td>Fixed Like, Contains and Exclude multi-value operations.</td>
+        <td>0.0.12-alpha</td>
+    </tr>
 </table>

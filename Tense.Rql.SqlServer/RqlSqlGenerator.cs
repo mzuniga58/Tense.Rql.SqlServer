@@ -84,7 +84,12 @@ namespace Tense.Rql.SqlServer
 			{
 				if (RqlUtilities.CheckForInclusion(property, selectFields))
 				{
-					AppendPropertyForRead(sql, tableAttribute, property, ref firstField);
+					if (firstField)
+						firstField = false;
+					else
+						sql.Append(", ");
+
+					AppendPropertyForRead(sql, tableAttribute, property);
 				}
 			}
 
@@ -132,25 +137,11 @@ namespace Tense.Rql.SqlServer
 
 			if (node.Find(RqlOperation.AGGREGATE) is RqlNode aggregateNode)
 			{
-				sql.AppendLine("SELECT COUNT(*) as [RecordCount]");
-				sql.Append("  FROM ( SELECT ");
-
-				bool firstMember = true;
-
-				foreach (RqlNode childNode in aggregateNode)
-				{
-					if (childNode.Operation == RqlOperation.PROPERTY)
-					{
-						var property = properties.FirstOrDefault(p => string.Equals(childNode.Value<string>(0), p.Name, StringComparison.OrdinalIgnoreCase));
-						AppendPropertyForRead(sql, tableAttribute, property, ref firstMember);
-					}
-				}
+				sql.Append("SELECT COUNT(*) as [RecordCount]");
 
 				AppendFromClause(sql, tableAttribute);
 				AppendWhereClause(sql, whereClause);
 				AppendGroupByClause(sql, aggregateNode, tableAttribute, properties);
-
-				sql.Append(") as T0");
 			}
 			else if (node.Find(RqlOperation.MAX) != null ||
 					 node.Find(RqlOperation.MIN) != null ||
@@ -161,15 +152,13 @@ namespace Tense.Rql.SqlServer
 			}
 			if (node.Find(RqlOperation.VALUES) is RqlNode valuesNode)
 			{
-				sql.Append("SELECT COUNT(*) as [RecordCount] FROM (SELECT DISTINCT ");
-				bool firstMember = true;
-
+				sql.Append("SELECT COUNT(*) AS [RecordCount] FROM (SELECT DISTINCT ");
 				var propertyNode = valuesNode.NonNullValue<RqlNode>(0);
 				var property = properties.FirstOrDefault(p => string.Equals(propertyNode.Value<string>(0), p.Name, StringComparison.OrdinalIgnoreCase));
-				AppendProperty(sql, tableAttribute, property, ref firstMember);
+				AppendProperty(sql, tableAttribute, property);
 				AppendFromClause(sql, tableAttribute);
 				AppendWhereClause(sql, whereClause);
-				sql.Append(") AS T0");
+				sql.Append(") AS T0"); 
 			}
 			else if (node.Find(RqlOperation.FIRST) is not null)
 			{
@@ -185,9 +174,14 @@ namespace Tense.Rql.SqlServer
 
 				foreach (var property in properties)
 				{
+					if (firstField)
+						firstField = false;
+					else
+						sql.Append(", ");
+
 					if (RqlUtilities.CheckForInclusion(property, selectFields, false))
 					{
-						AppendPropertyForRead(sql, tableAttribute, property, ref firstField);
+						AppendPropertyForRead(sql, tableAttribute, property);
 					}
 				}
 
@@ -599,16 +593,17 @@ namespace Tense.Rql.SqlServer
 				{
 					if (RqlUtilities.CheckForInclusion(property, selectFields))
 					{
-						AppendPropertyForRead(sql, tableAttribute, property, ref firstField);
+						if (firstField)
+							firstField = false;
+						else
+							sql.Append(", ");
+						AppendPropertyForRead(sql, tableAttribute, property);
 					}
 				}
 			}
 
 			AppendFromClause(sql, tableAttribute);
 			AppendWhereClause(sql, whereClause);
-			sql.AppendLine();
-
-			firstField = true;
 
 			if ( string.IsNullOrWhiteSpace(orderByClause))
             {
@@ -635,7 +630,8 @@ namespace Tense.Rql.SqlServer
 			if (count > _batchLimit)
 				count = _batchLimit;
 
-			sql.AppendLine($" OFFSET {start - 1} ROWS FETCH NEXT {count} ROWS ONLY");
+			sql.AppendLine();
+			sql.Append($"OFFSET {start - 1} ROWS FETCH NEXT {count} ROWS ONLY");
 			return sql.ToString();
 		}
 
@@ -723,14 +719,17 @@ namespace Tense.Rql.SqlServer
 				{
 					if (RqlUtilities.CheckForInclusion(property, selectFields))
 					{
-						AppendPropertyForRead(sql, tableAttribute, property, ref firstField);
+						if (firstField)
+							firstField = false;
+						else
+							sql.Append(", ");
+
+						AppendPropertyForRead(sql, tableAttribute, property);
 					}
 				}
 			}
 
 			AppendFromClause(sql, tableAttribute);
-
-			firstField = true;
 
 			if (string.IsNullOrWhiteSpace(orderByClause))
 			{
@@ -771,11 +770,10 @@ namespace Tense.Rql.SqlServer
 				if (NoPaging && pageFilter == null)
 				{
 					sql.Append("SELECT DISTINCT ");
-					bool firstMember = true;
 
 					var propertyNode = valuesNode.NonNullValue<RqlNode>(0);
 					var property = properties.FirstOrDefault(p => string.Equals(propertyNode.Value<string>(0), p.Name, StringComparison.OrdinalIgnoreCase));
-					AppendProperty(sql, tableAttribute, property, ref firstMember);
+					AppendProperty(sql, tableAttribute, property);
 
 					AppendFromClause(sql, tableAttribute);
 					AppendWhereClause(sql, whereClause);
@@ -804,11 +802,10 @@ namespace Tense.Rql.SqlServer
 				else
 				{
 					sql.Append("SELECT DISTINCT ");
-					bool firstMember = true;
 
 					var propertyNode = valuesNode.NonNullValue<RqlNode>(0);
 					var property = properties.FirstOrDefault(p => string.Equals(propertyNode.Value<string>(0), p.Name, StringComparison.OrdinalIgnoreCase));
-					AppendProperty(sql, tableAttribute, property, ref firstMember);
+					AppendProperty(sql, tableAttribute, property);
 
 					AppendFromClause(sql, tableAttribute);
 					AppendWhereClause(sql, whereClause);
@@ -846,7 +843,8 @@ namespace Tense.Rql.SqlServer
 					if (count > _batchLimit)
 						count = _batchLimit;
 
-					sql.AppendLine($" OFFSET {start - 1} ROWS FETCH NEXT {count} ROWS ONLY");
+					sql.AppendLine();
+					sql.Append($" OFFSET {start - 1} ROWS FETCH NEXT {count} ROWS ONLY");
 				}
 			}
 
@@ -1042,7 +1040,7 @@ namespace Tense.Rql.SqlServer
 					count = _batchLimit;
 
 				sql.AppendLine();
-				sql.AppendLine($" OFFSET {start - 1} ROWS FETCH NEXT {count} ROWS ONLY");
+				sql.Append($"OFFSET {start - 1} ROWS FETCH NEXT {count} ROWS ONLY");
 			}
 
 			return sql.ToString();
@@ -1070,8 +1068,13 @@ namespace Tense.Rql.SqlServer
 				{
 					if (childNode.Operation == RqlOperation.PROPERTY)
 					{
+						if (firstMember)
+							firstMember = false;
+						else
+							sql.Append(", ");
+
 						var property = properties.FirstOrDefault(p => string.Equals(childNode.Value<string>(0), p.Name, StringComparison.OrdinalIgnoreCase));
-						AppendPropertyForRead(sql, tableAttribute, property, ref firstMember);
+						AppendPropertyForRead(sql, tableAttribute, property);
 					}
 					else
 					{
@@ -1086,6 +1089,7 @@ namespace Tense.Rql.SqlServer
 							RqlOperation.SUM => "SUM",
 							_ => throw new InvalidCastException($"Invalid operation {childNode.Operation}"),
 						};
+
 						if (firstMember)
 							firstMember = false;
 						else
@@ -1309,20 +1313,52 @@ namespace Tense.Rql.SqlServer
 
 							if (memberAttribute != null)
 							{
-								if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
-									whereClause.Append($"{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB} LIKE (");
+								if (node.Count == 2)
+								{
+									if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
+										whereClause.Append($"{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB} LIKE (");
+									else
+										whereClause.Append($"{OB}{tableAttribute.Schema}{CB}.{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB} LIKE (");
+
+									var filter = node.NonNullValue<string>(1);
+									filter = filter.Replace("*", "%").Replace("?", "_");
+
+									var parameterName = $"@P{parameters.Count}";
+									parameters.Add(BuildSqlParameter(parameterName, property, filter));
+									whereClause.Append(parameterName);
+
+									whereClause.Append(')');
+								}
 								else
-									whereClause.Append($"{OB}{tableAttribute.Schema}{CB}.{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB} LIKE (");
+                                {
+									bool firstMember = true;
+									whereClause.Append("(");
 
-								var filter = node.NonNullValue<string>(1);
-								filter = filter.Replace("*", "%").Replace("?", "_");
+									for ( int j = 1; j < node.Count; j++)
+                                    {
+										if (firstMember)
+											firstMember = false;
+										else
+											whereClause.Append(" OR ");
 
-								var parameterName = $"@P{parameters.Count}";
-								parameters.Add(BuildSqlParameter(parameterName, property, filter));
-								whereClause.Append(parameterName);
+										if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
+											whereClause.Append($"{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB} LIKE (");
+										else
+											whereClause.Append($"{OB}{tableAttribute.Schema}{CB}.{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB} LIKE (");
 
-								whereClause.Append(')');
-							}
+										var filter = node.NonNullValue<string>(j);
+										filter = filter.Replace("*", "%").Replace("?", "_");
+
+										var parameterName = $"@P{parameters.Count}";
+										parameters.Add(BuildSqlParameter(parameterName, property, filter));
+										whereClause.Append(parameterName);
+
+										whereClause.Append(')');
+									}
+
+									whereClause.Append(")");
+                                }
+                            }
 							else
 							{
 								throw new InvalidCastException($"{property.Name} is not a member of {entityType.Name}");
@@ -1345,19 +1381,51 @@ namespace Tense.Rql.SqlServer
 
 							if (memberAttribute != null)
 							{
-								if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
-									whereClause.Append($"{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB} NOT LIKE (");
+								if (node.Count == 2)
+								{
+									if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
+										whereClause.Append($"{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB} NOT LIKE (");
+									else
+										whereClause.Append($"{OB}{tableAttribute.Schema}{CB}.{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB} NOT LIKE (");
+
+									var filter = node.NonNullValue<string>(1);
+									filter = filter.Replace("*", "%").Replace("?", "_");
+
+									var parameterName = $"@P{parameters.Count}";
+									parameters.Add(BuildSqlParameter(parameterName, property, filter));
+									whereClause.Append(parameterName);
+
+									whereClause.Append(')');
+								}
 								else
-									whereClause.Append($"{OB}{tableAttribute.Schema}{CB}.{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB} NOT LIKE (");
+								{
+									bool firstMember = true;
+									whereClause.Append("(");
 
-								var filter = node.NonNullValue<string>(1);
-								filter = filter.Replace("*", "%").Replace("?", "_");
+									for (int j = 1; j < node.Count; j++)
+									{
+										if (firstMember)
+											firstMember = false;
+										else
+											whereClause.Append(" AND ");
 
-								var parameterName = $"@P{parameters.Count}";
-								parameters.Add(BuildSqlParameter(parameterName, property, filter));
-								whereClause.Append(parameterName);
+										if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
+											whereClause.Append($"{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB} NOT LIKE (");
+										else
+											whereClause.Append($"{OB}{tableAttribute.Schema}{CB}.{OB}{tableAttribute.Name}{CB}.{OB}{property.Name}{CB} NOT LIKE (");
 
-								whereClause.Append(')');
+										var filter = node.NonNullValue<string>(j);
+										filter = filter.Replace("*", "%").Replace("?", "_");
+
+										var parameterName = $"@P{parameters.Count}";
+										parameters.Add(BuildSqlParameter(parameterName, property, filter));
+										whereClause.Append(parameterName);
+
+										whereClause.Append(')');
+									}
+
+									whereClause.Append(")");
+								}
 							}
 							else
 							{
@@ -2703,18 +2771,17 @@ namespace Tense.Rql.SqlServer
 		{
 			sql.AppendLine();
 			if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
-				sql.AppendLine($"  FROM [{tableAttribute.Name}] WITH(NOLOCK)");
+				sql.Append($"  FROM [{tableAttribute.Name}] WITH(NOLOCK)");
 			else
-				sql.AppendLine($"  FROM [{tableAttribute.Schema}].[{tableAttribute.Name}] WITH(NOLOCK)");
-
-			sql.Append(' ');
+				sql.Append($"  FROM [{tableAttribute.Schema}].[{tableAttribute.Name}] WITH(NOLOCK)");
 		}
 
 		private static void AppendOrderByClause(StringBuilder sql, string orderByClause)
 		{
+			sql.AppendLine();
 			if (!string.IsNullOrWhiteSpace(orderByClause))
 			{
-				sql.AppendLine($" ORDER BY {orderByClause}");
+				sql.Append($" ORDER BY {orderByClause}");
 			}
 		}
 
@@ -2722,38 +2789,37 @@ namespace Tense.Rql.SqlServer
 		{
 			if (!string.IsNullOrWhiteSpace(whereClause))
 			{
+				sql.AppendLine();
 				sql.Append(" WHERE ");
 				sql.Append(whereClause);
-				sql.Append(' ');
 			}
 		}
 
 		private static void AppendGroupByClause(StringBuilder sql, RqlNode aggregateNode, TableAttribute tableAttribute, PropertyInfo[] properties)
 		{
 			bool firstMember = true;
-			sql.Append("GROUP BY ");
+			sql.AppendLine();
+			sql.Append(" GROUP BY ");
 
 			foreach (RqlNode childNode in aggregateNode)
 			{
 				if (childNode.Operation == RqlOperation.PROPERTY)
 				{
+					if (firstMember)
+						firstMember = false;
+					else
+						sql.Append(", ");
+
 					var property = properties.FirstOrDefault(p => string.Equals(childNode.Value<string>(0), p.Name, StringComparison.OrdinalIgnoreCase));
-					AppendProperty(sql, tableAttribute, property, ref firstMember);
+					AppendProperty(sql, tableAttribute, property);
 				}
 			}
-
-			sql.Append(' ');
 		}
 
-		private static void AppendProperty(StringBuilder sql, TableAttribute tableAttribute, PropertyInfo property, ref bool firstMember)
+		private static void AppendProperty(StringBuilder sql, TableAttribute tableAttribute, PropertyInfo property)
 		{
 			var memberAttribute = property.GetCustomAttribute<MemberAttribute>();
 			var columnName = string.IsNullOrWhiteSpace(memberAttribute.ColumnName) ? property.Name : memberAttribute.ColumnName;
-
-			if (firstMember)
-				firstMember = false;
-			else
-				sql.Append(", ");
 
 			if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
 			{
@@ -2770,31 +2836,11 @@ namespace Tense.Rql.SqlServer
 					sql.Append($"[{tableAttribute.Schema}].[{tableAttribute.Name}].[{columnName}] as [{property.Name}]");
 			}
 		}
-		private static void AppendPropertyForOrderBy(StringBuilder sql, PropertyInfo property, ref bool firstMember)
+
+		private static void AppendPropertyForRead(StringBuilder sql, TableAttribute tableAttribute, PropertyInfo property, string overrideTable = "")
 		{
 			var memberAttribute = property.GetCustomAttribute<MemberAttribute>();
 			var columnName = string.IsNullOrWhiteSpace(memberAttribute.ColumnName) ? property.Name : memberAttribute.ColumnName;
-
-			if (firstMember)
-				firstMember = false;
-			else
-				sql.Append(", ");
-
-			if (string.Equals(columnName, property.Name, StringComparison.OrdinalIgnoreCase))
-				sql.Append($"[{columnName}]");
-			else
-				sql.Append($"[{property.Name}]");
-		}
-
-		private static void AppendPropertyForRead(StringBuilder sql, TableAttribute tableAttribute, PropertyInfo property, ref bool firstMember, string overrideTable = "")
-		{
-			var memberAttribute = property.GetCustomAttribute<MemberAttribute>();
-			var columnName = string.IsNullOrWhiteSpace(memberAttribute.ColumnName) ? property.Name : memberAttribute.ColumnName;
-
-			if (firstMember)
-				firstMember = false;
-			else
-				sql.Append(", ");
 
 			if (string.Equals(memberAttribute.NativeDataType, "hierarchyid", StringComparison.OrdinalIgnoreCase))
 			{

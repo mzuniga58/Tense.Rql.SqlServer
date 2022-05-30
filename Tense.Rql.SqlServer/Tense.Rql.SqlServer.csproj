@@ -38,7 +38,7 @@
 	<ItemGroup>
 		<PackageReference Include="System.Data.SqlClient" Version="4.8.3" />
 		<PackageReference Include="Tense" Version="0.0.4-alpha" />
-		<PackageReference Include="Tense.Rql" Version="0.0.10-alpha" />
+		<PackageReference Include="Tense.Rql" Version="0.0.11-alpha" />
 	</ItemGroup>
   <ItemGroup>
     <Compile Update="Resources\Resources.Designer.cs">
