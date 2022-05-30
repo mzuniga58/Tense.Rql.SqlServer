@@ -49,6 +49,6 @@ The SQL Statement needed to obtain the entity.
     <tr>
         <td>05/29/2022</td>
         <td>Fixed Like, Contains and Exclude multi-value operations.</td>
-        <td>0.0.12-alpha</td>
+        <td>0.0.13-alpha</td>
     </tr>
 </table>
