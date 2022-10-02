@@ -6,18 +6,27 @@ using System.Text;
 
 namespace Tense.Rql.SqlServer
 {
-	internal static class RqlUtilities
+	/// <summary>
+	/// A collection of RQL utilities
+	/// </summary>
+	public static class RqlUtilities
 	{
-		/// <summary>
-		/// Extracts the list of properties used by any aggregate functions
-		/// </summary>
-		/// <returns></returns>
-		internal static RqlNode ExtractAggregateFields(this RqlNode node)
+        /// <summary>
+        /// Extracts the list of properties used by any aggregate functions
+        /// </summary>
+        /// <returns></returns>
+        public static RqlNode ExtractAggregateFields(this RqlNode node)
 		{
 			return node.ExtractAggregateFields(node);
 		}
 
-		internal static RqlNode ExtractAggregateFields(this RqlNode _, RqlNode node)
+        /// <summary>
+        /// Extracts the list of properties used by any aggregate functions
+        /// </summary>
+        /// <param name="_"></param>
+        /// <param name="node"></param>
+        /// <returns></returns>
+        public static RqlNode ExtractAggregateFields(this RqlNode _, RqlNode node)
 		{
 			var resultNode = new RqlNode(RqlOperation.SELECT);
 
@@ -25,12 +34,15 @@ namespace Tense.Rql.SqlServer
 			{
 				case RqlOperation.AND:
 				case RqlOperation.OR:
-					foreach (RqlNode childnode in node)
+					foreach (RqlNode? childnode in node)
 					{
-						var agg = ExtractAggregateFields(childnode);
+						if (childnode != null)
+						{
+							var agg = ExtractAggregateFields(childnode);
 
-						foreach (var child in agg)
-							resultNode.Add(child);
+							foreach (var child in agg)
+								resultNode.Add(child);
+						}
 					}
 					break;
 
@@ -38,24 +50,24 @@ namespace Tense.Rql.SqlServer
 				case RqlOperation.MIN:
 				case RqlOperation.SUM:
 				case RqlOperation.MEAN:
-					resultNode.Add((RqlNode)node[0]);
+					resultNode.Add((RqlNode?)node[0]);
 					break;
 
 				case RqlOperation.COUNT:
 					if (node.Count > 0)
-						resultNode.Add((RqlNode)node[0]);
+						resultNode.Add((RqlNode?)node[0]);
 					break;
 
 				case RqlOperation.AGGREGATE:
-					foreach (RqlNode childNode in node)
+					foreach (RqlNode? childNode in node)
 					{
-						if (childNode.Operation == RqlOperation.PROPERTY)
+						if (childNode?.Operation == RqlOperation.PROPERTY)
 						{
 							resultNode.Add(childNode);
 						}
 						else
 						{
-							resultNode.Add((RqlNode)childNode[0]);
+							resultNode.Add((RqlNode?)childNode?[0]);
 						}
 					}
 					break;
@@ -68,49 +80,49 @@ namespace Tense.Rql.SqlServer
 		/// Extracts the list of items used in a where clause
 		/// </summary>
 		/// <returns></returns>
-		internal static List<KeyValuePair<string, object>> ExtractKeyList(this RqlNode node)
+		public static List<KeyValuePair<string, object>> ExtractKeyList(this RqlNode node)
 		{
 			var theList = new List<KeyValuePair<string, object>>();
 
 			if (node.Operation == RqlOperation.AND)
 			{
-				foreach (RqlNode child in node)
+				foreach (RqlNode? child in node)
 				{
-					theList.AddRange(child.ExtractKeyList());
+					theList.AddRange(child?.ExtractKeyList());
 				}
 			}
 			else if (node.Operation == RqlOperation.OR)
 			{
-				foreach (RqlNode child in node)
+				foreach (RqlNode? child in node)
 				{
-					theList.AddRange(child.ExtractKeyList());
+					theList.AddRange(child?.ExtractKeyList());
 				}
 			}
 			else if (node.Operation == RqlOperation.EQ)
 			{
-				theList.Add(new KeyValuePair<string, object>((string)node.NonNullValue<RqlNode>(0)[0], node.NonNullValue<RqlNode>(0)[1]));
-			}
-			else if (node.Operation == RqlOperation.NE)
+                theList.Add(new KeyValuePair<string, object>(node.NonNullValue<RqlNode>(0).NonNullValue<string>(0), node.NonNullValue<RqlNode>(0).NonNullValue<string>(1)));
+            }
+            else if (node.Operation == RqlOperation.NE)
 			{
-				theList.Add(new KeyValuePair<string, object>((string)node.NonNullValue<RqlNode>(0)[0], node.NonNullValue<RqlNode>(0)[1]));
+				theList.Add(new KeyValuePair<string, object>(node.NonNullValue<RqlNode>(0).NonNullValue<string>(0), node.NonNullValue<RqlNode>(0).NonNullValue<string>(1)));
 			}
 			else if (node.Operation == RqlOperation.LT)
 			{
-				theList.Add(new KeyValuePair<string, object>((string)node.NonNullValue<RqlNode>(0)[0], node.NonNullValue<RqlNode>(0)[1]));
-			}
-			else if (node.Operation == RqlOperation.LE)
+                theList.Add(new KeyValuePair<string, object>(node.NonNullValue<RqlNode>(0).NonNullValue<string>(0), node.NonNullValue<RqlNode>(0).NonNullValue<string>(1)));
+            }
+            else if (node.Operation == RqlOperation.GT)
 			{
-				theList.Add(new KeyValuePair<string, object>((string)node.NonNullValue<RqlNode>(0)[0], node.NonNullValue<RqlNode>(0)[1]));
-			}
-			else if (node.Operation == RqlOperation.GT)
+                theList.Add(new KeyValuePair<string, object>(node.NonNullValue<RqlNode>(0).NonNullValue<string>(0), node.NonNullValue<RqlNode>(0).NonNullValue<string>(1)));
+            }
+            else if (node.Operation == RqlOperation.LE)
 			{
-				theList.Add(new KeyValuePair<string, object>((string)node.NonNullValue<RqlNode>(0)[0], node.NonNullValue<RqlNode>(0)[1]));
-			}
-			else if (node.Operation == RqlOperation.GE)
+                theList.Add(new KeyValuePair<string, object>(node.NonNullValue<RqlNode>(0).NonNullValue<string>(0), node.NonNullValue<RqlNode>(0).NonNullValue<string>(1)));
+            }
+            else if (node.Operation == RqlOperation.GE)
 			{
-				theList.Add(new KeyValuePair<string, object>((string)node.NonNullValue<RqlNode>(0)[0], node.NonNullValue<RqlNode>(0)[1]));
-			}
-			else if (node.Operation == RqlOperation.DISTINCT)
+                theList.Add(new KeyValuePair<string, object>(node.NonNullValue<RqlNode>(0).NonNullValue<string>(0), node.NonNullValue<RqlNode>(0).NonNullValue<string>(1)));
+            }
+            else if (node.Operation == RqlOperation.DISTINCT)
 			{
 			}
 			else if (node.Operation == RqlOperation.LIMIT)
@@ -124,13 +136,13 @@ namespace Tense.Rql.SqlServer
 			}
 			else if (node.Operation == RqlOperation.IN)
 			{
-				theList.Add(new KeyValuePair<string, object>((string)node.NonNullValue<RqlNode>(0)[0], node.NonNullValue<RqlNode>(0)[1]));
-			}
-			else if (node.Operation == RqlOperation.OUT)
+                theList.Add(new KeyValuePair<string, object>(node.NonNullValue<RqlNode>(0).NonNullValue<string>(0), node.NonNullValue<RqlNode>(0).NonNullValue<string>(1)));
+            }
+            else if (node.Operation == RqlOperation.OUT)
 			{
-				theList.Add(new KeyValuePair<string, object>((string)node.NonNullValue<RqlNode>(0)[0], node.NonNullValue<RqlNode>(0)[1]));
-			}
-			else if (node.Operation == RqlOperation.SUM)
+                theList.Add(new KeyValuePair<string, object>(node.NonNullValue<RqlNode>(0).NonNullValue<string>(0), node.NonNullValue<RqlNode>(0).NonNullValue<string>(1)));
+            }
+            else if (node.Operation == RqlOperation.SUM)
 			{
 			}
 			else if (node.Operation == RqlOperation.MAX)
@@ -159,17 +171,24 @@ namespace Tense.Rql.SqlServer
 			}
 			else if (node.Operation == RqlOperation.CONTAINS || node.Operation == RqlOperation.LIKE)
 			{
-				theList.Add(new KeyValuePair<string, object>((string)node.NonNullValue<RqlNode>(0)[0], node.NonNullValue<RqlNode>(0)[1]));
-			}
-			else if (node.Operation == RqlOperation.EXCLUDES)
+                theList.Add(new KeyValuePair<string, object>(node.NonNullValue<RqlNode>(0).NonNullValue<string>(0), node.NonNullValue<RqlNode>(0).NonNullValue<string>(1)));
+            }
+            else if (node.Operation == RqlOperation.EXCLUDES)
 			{
-				theList.Add(new KeyValuePair<string, object>((string)node.NonNullValue<RqlNode>(0)[0], node.NonNullValue<RqlNode>(0)[1]));
-			}
+                theList.Add(new KeyValuePair<string, object>(node.NonNullValue<RqlNode>(0).NonNullValue<string>(0), node.NonNullValue<RqlNode>(0).NonNullValue<string>(1)));
+            }
 
-			return theList;
+            return theList;
 		}
 
-		internal static bool CheckForInclusion(PropertyInfo property, RqlNode? selectClause, bool includeKey = true)
+		/// <summary>
+		/// Checks to see if the property should be included in the SELECT Statement
+		/// </summary>
+		/// <param name="property"></param>
+		/// <param name="selectClause"></param>
+		/// <param name="includeKey"></param>
+		/// <returns></returns>
+		public static bool CheckForInclusion(PropertyInfo property, RqlNode? selectClause, bool includeKey = true)
 		{
 			var memberAttribute = property.GetCustomAttribute<MemberAttribute>();
 

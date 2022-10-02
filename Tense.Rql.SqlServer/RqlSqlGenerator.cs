@@ -904,12 +904,12 @@ namespace Tense.Rql.SqlServer
 
 			if (node?.Find(RqlOperation.AGGREGATE) is RqlNode aggregateNode)
 			{
-				foreach (RqlNode childNode in aggregateNode)
+				foreach (RqlNode? childNode in aggregateNode)
 				{
 					PropertyInfo property;
 					MemberAttribute memberAttribute;
 
-					if (childNode.Operation == RqlOperation.PROPERTY)
+					if (childNode?.Operation == RqlOperation.PROPERTY)
 					{
 						property = properties.FirstOrDefault(p => string.Equals(childNode.Value<string>(0), p.Name, StringComparison.OrdinalIgnoreCase));
 						memberAttribute = property.GetCustomAttribute<MemberAttribute>();
@@ -938,7 +938,7 @@ namespace Tense.Rql.SqlServer
 						var operationNode = childNode;
 						var operation = string.Empty;
 
-						switch (operationNode.Operation)
+						switch (operationNode?.Operation)
 						{
 							case RqlOperation.MAX:
 								operation = "max";
@@ -965,8 +965,8 @@ namespace Tense.Rql.SqlServer
 						else
 							sql.Append(", ");
 
-						var propertyNode = (RqlNode)operationNode[0];
-						property = properties.FirstOrDefault(p => string.Equals(propertyNode.Value<string>(0), p.Name, StringComparison.OrdinalIgnoreCase));
+						var propertyNode = (RqlNode?)operationNode?[0];
+						property = properties.FirstOrDefault(p => string.Equals(propertyNode?.Value<string>(0), p.Name, StringComparison.OrdinalIgnoreCase));
 						memberAttribute = property.GetCustomAttribute<MemberAttribute>();
 
 						if (memberAttribute != null)
@@ -975,11 +975,11 @@ namespace Tense.Rql.SqlServer
 
 							if (string.IsNullOrWhiteSpace(tableAttribute.Schema))
 							{
-								sql.Append($"{operation}([{tableAttribute.Name}].[{columnName}]) as [{propertyNode.Value<string>(0)}]");
+								sql.Append($"{operation}([{tableAttribute.Name}].[{columnName}]) as [{propertyNode?.Value<string>(0)}]");
 							}
 							else
 							{
-								sql.Append($"{operation}([{tableAttribute.Schema}].[{tableAttribute.Name}].[{columnName}]) as [{propertyNode.Value<string>(0)}]");
+								sql.Append($"{operation}([{tableAttribute.Schema}].[{tableAttribute.Name}].[{columnName}]) as [{propertyNode?.Value<string>(0)}]");
 							}
 						}
 					}
@@ -995,12 +995,12 @@ namespace Tense.Rql.SqlServer
 					sql.Append(" ORDER BY ");
 					firstMember = true;
 
-					foreach (RqlNode childNode in aggregateNode)
+					foreach (RqlNode? childNode in aggregateNode)
 					{
 						PropertyInfo property;
 						MemberAttribute memberAttribute;
 
-						if (childNode.Operation == RqlOperation.PROPERTY)
+						if (childNode?.Operation == RqlOperation.PROPERTY)
 						{
 							property = properties.FirstOrDefault(p => string.Equals(childNode.Value<string>(0), p.Name, StringComparison.OrdinalIgnoreCase));
 							memberAttribute = property.GetCustomAttribute<MemberAttribute>();
@@ -1064,9 +1064,9 @@ namespace Tense.Rql.SqlServer
 
 			if (node?.Find(RqlOperation.AGGREGATE) is RqlNode aggregateNode)
 			{
-				foreach (RqlNode childNode in aggregateNode)
+				foreach (RqlNode? childNode in aggregateNode)
 				{
-					if (childNode.Operation == RqlOperation.PROPERTY)
+					if (childNode?.Operation == RqlOperation.PROPERTY)
 					{
 						if (firstMember)
 							firstMember = false;
@@ -1080,14 +1080,14 @@ namespace Tense.Rql.SqlServer
 					{
 						var operation = string.Empty;
 
-						operation = childNode.Operation switch
+						operation = childNode?.Operation switch
 						{
 							RqlOperation.MAX => "MAX",
 							RqlOperation.MIN => "MIN",
 							RqlOperation.MEAN => "AVG",
 							RqlOperation.COUNT => "COUNT",
 							RqlOperation.SUM => "SUM",
-							_ => throw new InvalidCastException($"Invalid operation {childNode.Operation}"),
+							_ => throw new InvalidCastException($"Invalid operation {childNode?.Operation}"),
 						};
 
 						if (firstMember)
@@ -1095,8 +1095,8 @@ namespace Tense.Rql.SqlServer
 						else
 							sql.Append(", ");
 
-						var propertyNode = (RqlNode)childNode[0];
-						var property = properties.FirstOrDefault(p => string.Equals(propertyNode.Value<string>(0), p.Name, StringComparison.OrdinalIgnoreCase));
+						var propertyNode = (RqlNode?)childNode[0];
+						var property = properties.FirstOrDefault(p => string.Equals(propertyNode?.Value<string>(0), p.Name, StringComparison.OrdinalIgnoreCase));
 						var memberAttribute = property.GetCustomAttribute<MemberAttribute>();
 
 						if (memberAttribute != null)
@@ -1136,8 +1136,11 @@ namespace Tense.Rql.SqlServer
 		/// <param name="properties">The list of properties of type T</param>
 		/// <param name="parameters"></param>
 		/// <returns></returns>
-		private string ParseWhereClause(Type entityType, RqlNode node, string? op, TableAttribute tableAttribute, IEnumerable<PropertyInfo> properties, List<SqlParameter> parameters)
+		public string ParseWhereClause(Type entityType, RqlNode? node, string? op, TableAttribute tableAttribute, IEnumerable<PropertyInfo> properties, List<SqlParameter> parameters)
 		{
+			if (node == null)
+				return string.Empty;
+
 			if (node.Operation == RqlOperation.NOOP)
 				return string.Empty;
 
@@ -1152,7 +1155,7 @@ namespace Tense.Rql.SqlServer
 
 						bool first = true;
 
-						foreach (RqlNode argument in node)
+						foreach (RqlNode? argument in node)
 						{
 							var subClause = ParseWhereClause(entityType, argument, "AND", tableAttribute, properties, parameters);
 
@@ -1179,7 +1182,7 @@ namespace Tense.Rql.SqlServer
 
 						bool first = true;
 
-						foreach (RqlNode argument in node)
+						foreach (RqlNode? argument in node)
 						{
 							var subClause = ParseWhereClause(entityType, argument, "OR", tableAttribute, properties, parameters);
 
@@ -1200,27 +1203,27 @@ namespace Tense.Rql.SqlServer
 					break;
 
 				case RqlOperation.GE:
-					whereClause.Append(ConstructComparrisonOperator(entityType, ">=", node.NonNullValue<RqlNode>(0).NonNullValue<string>(0), node.NonNullValue<object>(1), parameters));
+					whereClause.Append(ConstructComparrisonOperator(entityType, ">=", node.NonNullValue<RqlNode>(0).NonNullValue<string>(0), node.Value<object>(1), parameters));
 					break;
 
 				case RqlOperation.GT:
-					whereClause.Append(ConstructComparrisonOperator(entityType, ">", node.NonNullValue<RqlNode>(0).NonNullValue<string>(0), node.NonNullValue<object>(1), parameters));
+					whereClause.Append(ConstructComparrisonOperator(entityType, ">", node.NonNullValue<RqlNode>(0).NonNullValue<string>(0), node.Value<object>(1), parameters));
 					break;
 
 				case RqlOperation.LE:
-					whereClause.Append(ConstructComparrisonOperator(entityType, "<=", node.NonNullValue<RqlNode>(0).NonNullValue<string>(0), node.NonNullValue<object>(1), parameters));
+					whereClause.Append(ConstructComparrisonOperator(entityType, "<=", node.NonNullValue<RqlNode>(0).NonNullValue<string>(0), node.Value<object>(1), parameters));
 					break;
 
 				case RqlOperation.LT:
-					whereClause.Append(ConstructComparrisonOperator(entityType, "<", node.NonNullValue<RqlNode>(0).NonNullValue<string>(0), node.NonNullValue<object>(1), parameters));
+					whereClause.Append(ConstructComparrisonOperator(entityType, "<", node.NonNullValue<RqlNode>(0).NonNullValue<string>(0), node.Value<object>(1), parameters));
 					break;
 
 				case RqlOperation.EQ:
-					whereClause.Append(ConstructComparrisonOperator(entityType, "=", node.NonNullValue<RqlNode>(0).NonNullValue<string>(0), node.NonNullValue<object>(1), parameters));
+					whereClause.Append(ConstructComparrisonOperator(entityType, "=", node.NonNullValue<RqlNode>(0).NonNullValue<string>(0), node.Value<object>(1), parameters));
 					break;
 
 				case RqlOperation.NE:
-					whereClause.Append(ConstructComparrisonOperator(entityType, "<>", node.NonNullValue<RqlNode>(0).NonNullValue<string>(0), node.NonNullValue<object>(1), parameters));
+					whereClause.Append(ConstructComparrisonOperator(entityType, "<>", node.NonNullValue<RqlNode>(0).NonNullValue<string>(0), node.Value<object>(1), parameters));
 					break;
 
 				case RqlOperation.IN:
@@ -1443,7 +1446,7 @@ namespace Tense.Rql.SqlServer
 			return whereClause.ToString();
 		}
 
-		private string ConstructComparrisonOperator(Type nodeType, string operation, string attributeName, object attributeValue, List<SqlParameter> parameters)
+		private string ConstructComparrisonOperator(Type nodeType, string operation, string attributeName, object? attributeValue, List<SqlParameter> parameters)
 		{
 			var tableAttribute = nodeType.GetCustomAttribute<TableAttribute>(false);
 
@@ -1521,8 +1524,11 @@ namespace Tense.Rql.SqlServer
 		/// <param name="node">The RQL node representation of the query string</param>
 		/// <param name="domain">Replace schema.tablename with this value of present</param>
 		/// <returns></returns>
-		private string ParseOrderByClause(Type entityType, RqlNode node, string domain = "")
+		public string ParseOrderByClause(Type entityType, RqlNode? node, string domain = "")
 		{
+			if (node == null)
+				return string.Empty;
+
 			if (node.Operation == RqlOperation.NOOP)
 				return string.Empty;
 			
@@ -1537,7 +1543,7 @@ namespace Tense.Rql.SqlServer
 			{
 				case RqlOperation.AND:
 					{
-						foreach (RqlNode argument in node)
+						foreach (RqlNode? argument in node)
 						{
 							var subClause = ParseOrderByClause(entityType, argument, domain);
 
@@ -1554,7 +1560,7 @@ namespace Tense.Rql.SqlServer
 
 				case RqlOperation.OR:
 					{
-						foreach (RqlNode argument in node)
+						foreach (RqlNode? argument in node)
 						{
 							var subClause = ParseOrderByClause(entityType, argument, domain);
 
@@ -1571,9 +1577,9 @@ namespace Tense.Rql.SqlServer
 
 				case RqlOperation.SORT:
 					{
-						foreach (RqlNode argument in node)
+						foreach (RqlNode? argument in node)
 						{
-							var fieldName = argument.NonNullValue<RqlNode>(1).Value<string>(0);
+							var fieldName = argument?.NonNullValue<RqlNode>(1).Value<string>(0);
 							var property = entityType.GetProperties().FirstOrDefault(p => string.Equals(p.Name, fieldName, StringComparison.OrdinalIgnoreCase));
 
 							if (property != null)
@@ -1587,7 +1593,7 @@ namespace Tense.Rql.SqlServer
 									if (orderByClause.Length > 0)
 										orderByClause.Append(", ");
 
-									if (argument.NonNullValue<RqlSortOrder>(0) == RqlSortOrder.Descending)
+									if (argument?.NonNullValue<RqlSortOrder>(0) == RqlSortOrder.Descending)
 									{
 										if (string.IsNullOrWhiteSpace(domain))
 										{
@@ -2658,12 +2664,12 @@ namespace Tense.Rql.SqlServer
 				switch (node.Operation)
 				{
 					case RqlOperation.AND:
-						foreach (RqlNode childNode in node)
+						foreach (RqlNode? childNode in node)
 							BuildSimpleAggregate(entityType, childNode, sql, properties, tableAttribute, ref first);
 						break;
 
 					case RqlOperation.OR:
-						foreach (RqlNode childNode in node)
+						foreach (RqlNode? childNode in node)
 							BuildSimpleAggregate(entityType, childNode, sql, properties, tableAttribute, ref first);
 						break;
 
@@ -2747,7 +2753,7 @@ namespace Tense.Rql.SqlServer
 				{
 					case RqlOperation.AND:
 					case RqlOperation.OR:
-						foreach (RqlNode childNode in node)
+						foreach (RqlNode? childNode in node)
 							result |= IncludedInAggregationList(childNode, propertyName);
 						break;
 
@@ -2775,8 +2781,13 @@ namespace Tense.Rql.SqlServer
 			else
 				sql.Append($"  FROM [{tableAttribute.Schema}].[{tableAttribute.Name}] WITH(NOLOCK)");
 		}
-
-		private static void AppendOrderByClause(StringBuilder sql, string orderByClause)
+		
+		/// <summary>
+		/// Append Order by clause
+		/// </summary>
+		/// <param name="sql"></param>
+		/// <param name="orderByClause"></param>
+		public static void AppendOrderByClause(StringBuilder sql, string orderByClause)
 		{
 			sql.AppendLine();
 			if (!string.IsNullOrWhiteSpace(orderByClause))
@@ -2785,7 +2796,12 @@ namespace Tense.Rql.SqlServer
 			}
 		}
 
-		private static void AppendWhereClause(StringBuilder sql, string whereClause)
+		/// <summary>
+		/// Append Where Clause
+		/// </summary>
+		/// <param name="sql"></param>
+		/// <param name="whereClause"></param>
+		public static void AppendWhereClause(StringBuilder sql, string whereClause)
 		{
 			if (!string.IsNullOrWhiteSpace(whereClause))
 			{
@@ -2795,15 +2811,22 @@ namespace Tense.Rql.SqlServer
 			}
 		}
 
-		private static void AppendGroupByClause(StringBuilder sql, RqlNode aggregateNode, TableAttribute tableAttribute, PropertyInfo[] properties)
+		/// <summary>
+		/// Append Group by Clause
+		/// </summary>
+		/// <param name="sql"></param>
+		/// <param name="aggregateNode"></param>
+		/// <param name="tableAttribute"></param>
+		/// <param name="properties"></param>
+		public static void AppendGroupByClause(StringBuilder sql, RqlNode aggregateNode, TableAttribute tableAttribute, PropertyInfo[] properties)
 		{
 			bool firstMember = true;
 			sql.AppendLine();
 			sql.Append(" GROUP BY ");
 
-			foreach (RqlNode childNode in aggregateNode)
+			foreach (RqlNode? childNode in aggregateNode)
 			{
-				if (childNode.Operation == RqlOperation.PROPERTY)
+				if (childNode?.Operation == RqlOperation.PROPERTY)
 				{
 					if (firstMember)
 						firstMember = false;
@@ -2837,7 +2860,14 @@ namespace Tense.Rql.SqlServer
 			}
 		}
 
-		private static void AppendPropertyForRead(StringBuilder sql, TableAttribute tableAttribute, PropertyInfo property, string overrideTable = "")
+		/// <summary>
+		/// Append Property for Read
+		/// </summary>
+		/// <param name="sql"></param>
+		/// <param name="tableAttribute"></param>
+		/// <param name="property"></param>
+		/// <param name="overrideTable"></param>
+		public static void AppendPropertyForRead(StringBuilder sql, TableAttribute tableAttribute, PropertyInfo property, string overrideTable = "")
 		{
 			var memberAttribute = property.GetCustomAttribute<MemberAttribute>();
 			var columnName = string.IsNullOrWhiteSpace(memberAttribute.ColumnName) ? property.Name : memberAttribute.ColumnName;
